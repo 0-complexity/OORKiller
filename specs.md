@@ -7,6 +7,7 @@ It will not try to throttle down resource hungry processes but instead it will s
 This also means that the OOR Killer is not a monitoring system. It just take action at an instant T cause the current status of the system is not acceptable anymore.
 
 Still, the action taken should try to be the less harmfull for the system. To achive this we follow the same rules as the linux OOM killer, but adapted for our needs:
+
 1. we lose the minimum amount of work done
 2. we recover a large amount of resource
 3. we want to kill the minimum amount of processes
