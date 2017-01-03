@@ -47,7 +47,6 @@ To be defined
 
 ### Network
 - check for duplicated mac addresses
-- 
 
 ## Architecture
 - All the thresholds and limits should be configurable and not hardcoded.
