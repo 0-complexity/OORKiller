@@ -1,4 +1,4 @@
-# ORK - Out Of Resource Killer
+# ORK - Out of Resource Killer
 
 ## Role
 The role of the ORK is to be the last shield against an unresponsive machine.
@@ -46,7 +46,8 @@ If the threshold of the disks is reached the ORK will try to free up some space 
 To be defined
 
 ### Network
-- check for duplicated mac addresses
+Check for duplicated mac addresses between all nodes.  
+ORK should monitor the ARP packets and detect duplicated mac addresses. ORK put the duplicated interface down.
 
 ## Architecture
 - All the thresholds and limits should be configurable and not hardcoded.
