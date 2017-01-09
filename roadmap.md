@@ -1,13 +1,13 @@
 # Roadmap
 
-- 0.1
+- 2.1.7-beta1
   - basic core functionality
   - memory monitoring
-- 0.2
+- 2.1.7-beta2
   - cpu monitoring  
-- 0.3
+- 2.1.7-beta3
   - disk monitoring
-- 0.4
+- 2.1.7-beta4
   - network monitoring
-- 0.5
+- 2.1.7 ( same release as openvcloud)
   - iops monitoring
