@@ -2,6 +2,7 @@ package process
 
 import (
 	"fmt"
+	"github.com/0-complexity/ORK/utils"
 	"github.com/op/go-logging"
 	"github.com/shirou/gopsutil/process"
 	"strings"
@@ -75,7 +76,7 @@ func SetupWhitelist(processes []*process.Process) (map[int32]*process.Process, e
 	for _, p := range processes {
 		processName, err := p.Name()
 		if err != nil {
-			log.Debug("Erorr getting process name.")
+			log.Debug("Erorr getting process name")
 			return nil, err
 		}
 
@@ -130,4 +131,60 @@ func IsProcessKillable(p *process.Process, pMap map[int32]*process.Process, whit
 		pPid, err = p.Ppid()
 	}
 	return true, nil
+}
+
+// KillProcesses kills processes to free up memory.
+// systemCheck is the function used to determine if the system state is ok or not.
+// sorter is the sorting function used to sort processes.
+func KillProcesses(systemCheck func() (bool, error), sorter func([]*process.Process, int, int) bool) error {
+	processes, err := MakeProcesses()
+	if err != nil {
+		log.Debug("Error listing processes")
+		return nil
+
+	}
+	processesMap := MakeProcessesMap(processes)
+	whiteListPids, err := SetupWhitelist(processes)
+
+	if err != nil {
+		log.Debug("Error setting up processes whitelist")
+		return err
+	}
+
+	processesStruct := Processes{processes, sorter}
+	utils.Sort(&processesStruct)
+
+	for _, p := range processesStruct.Processes {
+		if memOk, memErr := systemCheck(); memErr != nil {
+			return memErr
+		} else if memOk {
+			return nil
+		}
+
+		killable, err := IsProcessKillable(p, processesMap, whiteListPids)
+		if err != nil {
+			log.Debug("Error checking is process is killable")
+			continue
+		}
+
+		if !killable {
+			continue
+		}
+
+		name, err := p.Name()
+		if err != nil {
+			log.Warning("Error getting process name")
+			name = "unknown"
+		}
+
+		err = p.Kill()
+		if err != nil {
+			log.Warning("Error killing process", p.Pid)
+			continue
+		}
+
+		log.Info("Successfully killed process", p.Pid, name)
+	}
+
+	return nil
 }
