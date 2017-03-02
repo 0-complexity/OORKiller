@@ -16,16 +16,17 @@ func (d *Domains) Free() {
 	}
 }
 
-func (d Domains) Len() int { return len(d.Domains) }
-func (d Domains) Swap(i, j int) {
+func (d *Domains) Len() int { return len(d.Domains) }
+func (d *Domains) Swap(i, j int) {
 	d.Domains[i], d.Domains[j] = d.Domains[j], d.Domains[i]
 }
 
-func (d Domains) Less(i, j int) bool {
+func (d *Domains) Less(i, j int) bool {
 
 	return d.Sort(d.Domains, i, j)
 }
 
+// DomainByMem sorts domains by memory consumption in a descending order
 func DomainsByMem(d []libvirt.Domain, i, j int) bool {
 	diInfo, err := d[i].GetInfo()
 	if err != nil {

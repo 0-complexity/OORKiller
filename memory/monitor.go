@@ -1,146 +1,158 @@
+// Package memory implements a memory monitor
 package memory
 
 import (
 	"github.com/0-complexity/ORK/domain"
 	"github.com/0-complexity/ORK/process"
+	"github.com/0-complexity/ORK/utils"
 	libvirt "github.com/libvirt/libvirt-go"
 	"github.com/op/go-logging"
 	"github.com/shirou/gopsutil/mem"
-	"sort"
 )
 
-// thresholdPercent is the percent at which ORK should kill processes
-const thresholdPercent float64 = 20.0
+// memoryThreshold is the percent at which ORK should kill processes
+const memoryThreshold uint64 = 100
 
 const connectionURI string = "qemu:///system"
+const normalConsumption = "Memory consumption back to normal"
 
 var log = logging.MustGetLogger("ORK")
 
-func Sort(i interface{}) error {
-	var err error
-	defer func() {
-		if r := recover(); r != nil {
-			err, _ = r.(error)
-		}
-	}()
+//getAvailableMemory returns available memory in MB
+func getAvailableMemory() (uint64, error) {
 
-	switch t := i.(type) {
-	case *domain.Domains:
-		sort.Sort(domain.Domains(*t))
-	case *process.Processes:
-		sort.Sort(process.Processes(*t))
+	if v, err := mem.VirtualMemory(); err != nil {
+		return 0, err
+	} else {
+		return v.Available / (1024 * 1024), nil
 	}
-
-	return err
 }
 
+// Monitor checks the memory consumption and if it exceeds the defined threshold it kills
+// virtual machines and processes until the consumption is bellow the threshold.
 func Monitor() error {
 	log.Info("Monitoring memory")
 
-	v, err := mem.VirtualMemory()
+	availableMemory, memErr := getAvailableMemory()
+	if memErr != nil {
+		log.Debug("Error getting available memory")
+		return memErr
+	}
+
+	if availableMemory > memoryThreshold {
+		return nil
+	}
+
+	log.Warning("Memory threshold reached")
+
+	conn, err := libvirt.NewConnect(connectionURI)
 
 	if err != nil {
-		log.Debug("Debug listing virtual memory")
+		log.Debug("Error connecting to qemu")
+		return err
+	}
+	defer conn.Close()
+
+	doms, err := conn.ListAllDomains(libvirt.CONNECT_LIST_DOMAINS_ACTIVE)
+	if err != nil {
+		log.Debug("Error listing domains")
 		return err
 	}
 
-	if v.UsedPercent > thresholdPercent {
-		log.Info("ALERT: reached memory threshold!!!")
+	domains := domain.Domains{doms, domain.DomainsByMem}
+	defer domains.Free()
 
-		conn, err := libvirt.NewConnect(connectionURI)
+	err = utils.Sort(&domains)
+	if err != nil {
+		log.Debug("Error sorting domains")
+		return err
+	}
+
+	for i := 0; i < len(domains.Domains) && availableMemory <= memoryThreshold; i++ {
+		if memErr!= nil {
+			log.Debug("Error getting available memory")
+
+		}
+
+		d := domains.Domains[i]
+		name, err := d.GetName()
 
 		if err != nil {
-			log.Debug("Error connecting to qemu")
-			return err
-		}
-		defer conn.Close()
-
-		doms, err := conn.ListAllDomains(libvirt.CONNECT_LIST_DOMAINS_ACTIVE)
-		if err != nil {
-			log.Debug("Error listing domains")
-			return err
+			log.Warning("Error getting domain name")
+			name = "unknown"
 		}
 
-		domains := domain.Domains{doms, domain.DomainsByMem}
-		defer domains.Free()
-
-		err = Sort(&domains)
-		if err != nil {
-			log.Debug("Error sorting domains")
-			return err
-		}
-
-		for _, d := range domains.Domains {
-			name, err := d.GetName()
-
-			if err != nil {
-				log.Debug("Error getting domain name")
-				return err
-			}
-
-			err = d.DestroyFlags(1)
-			if err != nil {
-				log.Debug("Error destroying machine", name)
-				return err
-			}
-			log.Info("Successfully destroyed", name)
-
-			v, _ = mem.VirtualMemory()
-
-			if v.UsedPercent < thresholdPercent {
-				return nil
-			}
-		}
-
-		processes, err := process.MakeProcesses()
-		if err != nil {
-			log.Debug("Error listing processes")
-			return nil
-
-		}
-		processesMap := process.MakeProcessesMap(processes)
-		whiteListPids, err := process.SetupWhitelist(processes)
+		err = d.DestroyFlags(1)
+		availableMemory, memErr = getAvailableMemory()
 
 		if err != nil {
-			log.Debug("Error setting up processes whitelist")
-			return err
+			log.Warning("Error destroying machine", name)
+			continue
+		}
+		log.Info("Successfully destroyed", name)
+
+	}
+
+	if availableMemory > memoryThreshold {
+		log.Info(normalConsumption)
+		return nil
+	}
+
+	processes, err := process.MakeProcesses()
+	if err != nil {
+		log.Debug("Error listing processes")
+		return nil
+
+	}
+	processesMap := process.MakeProcessesMap(processes)
+	whiteListPids, err := process.SetupWhitelist(processes)
+
+	if err != nil {
+		log.Debug("Error setting up processes whitelist")
+		return err
+	}
+
+	processesStruct := process.Processes{processes, process.ProcessesByMem}
+	utils.Sort(&processesStruct)
+
+	for i := 0; i < len(processesStruct.Processes) && availableMemory <= memoryThreshold; i++ {
+		if memErr!= nil {
+			log.Debug("Error getting available memory")
+
 		}
 
-		processesStruct := process.Processes{processes, process.ProcessesByMem}
-		Sort(&processesStruct)
-
-		for _, p := range processesStruct.Processes {
-			killable, err := process.IsProcessKillable(p, processesMap, whiteListPids)
-			if err != nil {
-				log.Debug("Error checking is process is killable")
-				return err
-			}
-
-			if !killable {
-				continue
-			}
-
-			name, err := p.Name()
-			if err != nil {
-				log.Debug("Error getting process name")
-				return err
-			}
-
-			err = p.Kill()
-			if err != nil {
-				log.Debug("Error killing process", p.Pid)
-				return err
-			}
-
-			log.Info("Successfully killed process", p.Pid, name)
-
-			v, _ = mem.VirtualMemory()
-
-			if v.UsedPercent < thresholdPercent {
-				log.Info("Memory consumption back to normal")
-				return nil
-			}
+		p := processesStruct.Processes[i]
+		killable, err := process.IsProcessKillable(p, processesMap, whiteListPids)
+		if err != nil {
+			log.Debug("Error checking is process is killable")
+			continue
 		}
+
+		if !killable {
+			continue
+		}
+
+		name, err := p.Name()
+		if err != nil {
+			log.Warning("Error getting process name")
+			name = "unknown"
+		}
+
+		err = p.Kill()
+		availableMemory, memErr = getAvailableMemory()
+
+		if err != nil {
+			log.Warning("Error killing process", p.Pid)
+			continue
+		}
+
+		log.Info("Successfully killed process", p.Pid, name)
+	}
+
+	if availableMemory > memoryThreshold {
+		log.Info(normalConsumption)
+	} else {
+		log.Warning("Memory consumption still above threshold")
 	}
 	return nil
 }

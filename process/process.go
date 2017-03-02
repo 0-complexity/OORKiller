@@ -1,32 +1,35 @@
 package process
 
 import (
-	"errors"
+	"fmt"
 	"github.com/op/go-logging"
 	"github.com/shirou/gopsutil/process"
-	"regexp"
+	"strings"
 )
 
 var log = logging.MustGetLogger("ORK")
 
+// whiteListNames is slice of processes names that should never be killed.
 var whitelistNames = []string{"jsagent.py", "volumedriver"}
 
-// Processes is a struct of a list of process.Process and a sorting function
+// Processes is a struct of a list of process.Process and a function to be
+// used to sort the list.
 type Processes struct {
 	Processes []*process.Process
 	Sort      func([]*process.Process, int, int) bool
 }
 
-func (p Processes) Len() int { return len(p.Processes) }
-func (p Processes) Swap(i, j int) {
+func (p *Processes) Len() int { return len(p.Processes) }
+func (p *Processes) Swap(i, j int) {
 	p.Processes[i], p.Processes[j] = p.Processes[j], p.Processes[i]
 }
 
-func (p Processes) Less(i, j int) bool {
+func (p *Processes) Less(i, j int) bool {
 
 	return p.Sort(p.Processes, i, j)
 }
 
+// ProcessesByMem sorts processes by memory consumption in a descending order
 func ProcessesByMem(p []*process.Process, i, j int) bool {
 	iInfo, err := p[i].MemoryInfo()
 	if err != nil {
@@ -39,6 +42,7 @@ func ProcessesByMem(p []*process.Process, i, j int) bool {
 	return iInfo.RSS > jInfo.RSS
 }
 
+// MakeProcesses returns a list or process.Process instances
 func MakeProcesses() ([]*process.Process, error) {
 	processesIds, err := process.Pids()
 	if err != nil {
@@ -53,6 +57,7 @@ func MakeProcesses() ([]*process.Process, error) {
 	return processes, nil
 }
 
+// MakeProcessesMap returns a map of process pid and process.Process instance for all running processes
 func MakeProcessesMap(processes []*process.Process) map[int32]*process.Process {
 	processesMap := make(map[int32]*process.Process)
 
@@ -63,6 +68,7 @@ func MakeProcessesMap(processes []*process.Process) map[int32]*process.Process {
 	return processesMap
 }
 
+// SetupWhiteList returns a map of pid and process.Process instance for whitelisted processes.
 func SetupWhitelist(processes []*process.Process) (map[int32]*process.Process, error) {
 	whiteList := make(map[int32]*process.Process)
 
@@ -74,18 +80,11 @@ func SetupWhitelist(processes []*process.Process) (map[int32]*process.Process, e
 		}
 
 		for _, name := range whitelistNames {
-
-			match, err := regexp.MatchString(name, processName)
-			if err != nil {
-				log.Debug("Erorr matching process name.")
-				return nil, err
-			}
-			if match {
+			if match := strings.Contains(processName, name); match {
 				whiteList[p.Pid] = p
 				break
 			}
 		}
-
 	}
 	kernelProcess, err := process.NewProcess(int32(2))
 	if err != nil {
@@ -98,6 +97,9 @@ func SetupWhitelist(processes []*process.Process) (map[int32]*process.Process, e
 	return whiteList, nil
 }
 
+// IsProcessKillable checks if a process can be killed or not.
+// A process can't be killed if it is a member of the whiteList or if it is a child of a process in the
+// whiteList.
 func IsProcessKillable(p *process.Process, pMap map[int32]*process.Process, whiteList map[int32]*process.Process) (bool, error) {
 	_, whiteListed := whiteList[p.Pid]
 	if whiteListed || p.Pid == 1 {
@@ -113,17 +115,17 @@ func IsProcessKillable(p *process.Process, pMap map[int32]*process.Process, whit
 		if pPid == 1 {
 			return true, nil
 		}
-		_, whiteListed = whiteList[pPid]
 
-		if whiteListed {
+		if _, ok := whiteList[pPid]; ok {
 			return false, nil
 		}
-		var inMap bool
-		p, inMap = pMap[pPid]
 
+		p, inMap := pMap[pPid]
 		if inMap != true {
-			log.Debug("Error getting process from map")
-			return false, errors.New("Error")
+			message := fmt.Sprintf("Error getting process %v from process map", p.Pid)
+			log.Debug(message)
+			return false, fmt.Errorf(message)
+
 		}
 		pPid, err = p.Ppid()
 	}
