@@ -13,11 +13,13 @@ var log = logging.MustGetLogger("ORK")
 // whiteListNames is slice of processes names that should never be killed.
 var whitelistNames = []string{"jsagent.py", "volumedriver"}
 
+type Sorter func([]*process.Process, int, int) bool
+
 // Processes is a struct of a list of process.Process and a function to be
 // used to sort the list.
 type Processes struct {
 	Processes []*process.Process
-	Sort      func([]*process.Process, int, int) bool
+	Sort      Sorter
 }
 
 func (p *Processes) Len() int { return len(p.Processes) }
@@ -136,7 +138,7 @@ func IsProcessKillable(p *process.Process, pMap map[int32]*process.Process, whit
 // KillProcesses kills processes to free up memory.
 // systemCheck is the function used to determine if the system state is ok or not.
 // sorter is the sorting function used to sort processes.
-func KillProcesses(systemCheck func() (bool, error), sorter func([]*process.Process, int, int) bool) error {
+func KillProcesses(systemCheck func() (bool, error), sorter Sorter) error {
 	processes, err := MakeProcesses()
 	if err != nil {
 		log.Debug("Error listing processes")
@@ -177,12 +179,15 @@ func KillProcesses(systemCheck func() (bool, error), sorter func([]*process.Proc
 			name = "unknown"
 		}
 
+		utils.LogToKernel(fmt.Sprintf("ORK: attempting to kill process with pid %v and name %v", p.Pid, name))
 		err = p.Kill()
 		if err != nil {
+			utils.LogToKernel(fmt.Sprintf("ORK: error killing process with pid %v and name %v", p.Pid, name))
 			log.Warning("Error killing process", p.Pid)
 			continue
 		}
 
+		utils.LogToKernel(fmt.Sprintf("ORK: successfully killed process with pid %v and name %v", p.Pid, name))
 		log.Info("Successfully killed process", p.Pid, name)
 	}
 

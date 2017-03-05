@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"fmt"
 	"github.com/0-complexity/ORK/utils"
 	libvirt "github.com/libvirt/libvirt-go"
 	"github.com/op/go-logging"
@@ -10,10 +11,12 @@ const connectionURI string = "qemu:///system"
 
 var log = logging.MustGetLogger("ORK")
 
+type Sorter func([]libvirt.Domain, int, int) bool
+
 // Domains is a list of libvirt.Domains
 type Domains struct {
 	Domains []libvirt.Domain
-	Sort    func([]libvirt.Domain, int, int) bool
+	Sort    Sorter
 }
 
 func (d *Domains) Free() {
@@ -48,7 +51,7 @@ func DomainsByMem(d []libvirt.Domain, i, j int) bool {
 // DestroyDomains destroys domains to free up memory.
 // systemCheck is the function used to determine if the system state is ok or not.
 // sorter is the sorting function used to sort domains.
-func DestroyDomains(systemCheck func() (bool, error), sorter func([]libvirt.Domain, int, int) bool) error {
+func DestroyDomains(systemCheck func() (bool, error), sorter Sorter) error {
 	conn, err := libvirt.NewConnect(connectionURI)
 
 	if err != nil {
@@ -85,11 +88,14 @@ func DestroyDomains(systemCheck func() (bool, error), sorter func([]libvirt.Doma
 			name = "unknown"
 		}
 
+		utils.LogToKernel(fmt.Sprintf("ORK: attempting to destroy machine %v", name))
 		err = d.DestroyFlags(1)
 		if err != nil {
+			utils.LogToKernel(fmt.Sprintf("ORK: error destroying machine %v", name))
 			log.Warning("Error destroying machine", name)
 			continue
 		}
+		utils.LogToKernel(fmt.Sprintf("ORK: successfully destroyed machine %v", name))
 		log.Info("Successfully destroyed", name)
 
 	}

@@ -21,7 +21,6 @@ func isMemoryOk() (bool, error) {
 	} else {
 		if availableMem := v.Available / (1024 * 1024); availableMem > memoryThreshold {
 			log.Debug("Memory consumption is below threshold")
-			log.Info(availableMem)
 			return true, nil
 		}
 		log.Warning("Memory consumption is above threshold")
