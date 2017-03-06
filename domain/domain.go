@@ -84,18 +84,18 @@ func DestroyDomains(systemCheck func() (bool, error), sorter Sorter) error {
 
 		name, err := d.GetName()
 		if err != nil {
-			log.Warning("Error getting domain name")
+			log.Error("Error getting domain name")
 			name = "unknown"
 		}
 
-		utils.LogToKernel(fmt.Sprintf("ORK: attempting to destroy machine %v", name))
+		utils.LogToKernel(fmt.Sprintf("ORK: attempting to destroy machine %v\n", name))
 		err = d.DestroyFlags(1)
 		if err != nil {
-			utils.LogToKernel(fmt.Sprintf("ORK: error destroying machine %v", name))
-			log.Warning("Error destroying machine", name)
+			utils.LogToKernel(fmt.Sprintf("ORK: error destroying machine %v\n", name))
+			log.Error("Error destroying machine", name)
 			continue
 		}
-		utils.LogToKernel(fmt.Sprintf("ORK: successfully destroyed machine %v", name))
+		utils.LogToKernel(fmt.Sprintf("ORK: successfully destroyed machine %v\n", name))
 		log.Info("Successfully destroyed", name)
 
 	}

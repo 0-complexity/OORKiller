@@ -72,7 +72,7 @@ func MakeProcessesMap(processes []*process.Process) map[int32]*process.Process {
 }
 
 // SetupWhiteList returns a map of pid and process.Process instance for whitelisted processes.
-func SetupWhitelist(processes []*process.Process) (map[int32]*process.Process, error) {
+func SetupWhiteList(processes []*process.Process) (map[int32]*process.Process, error) {
 	whiteList := make(map[int32]*process.Process)
 
 	for _, p := range processes {
@@ -146,7 +146,7 @@ func KillProcesses(systemCheck func() (bool, error), sorter Sorter) error {
 
 	}
 	processesMap := MakeProcessesMap(processes)
-	whiteListPids, err := SetupWhitelist(processes)
+	whiteListPids, err := SetupWhiteList(processes)
 
 	if err != nil {
 		log.Debug("Error setting up processes whitelist")
@@ -175,19 +175,19 @@ func KillProcesses(systemCheck func() (bool, error), sorter Sorter) error {
 
 		name, err := p.Name()
 		if err != nil {
-			log.Warning("Error getting process name")
+			log.Error("Error getting process name")
 			name = "unknown"
 		}
 
-		utils.LogToKernel(fmt.Sprintf("ORK: attempting to kill process with pid %v and name %v", p.Pid, name))
+		utils.LogToKernel(fmt.Sprintf("ORK: attempting to kill process with pid %v and name %v\n", p.Pid, name))
 		err = p.Kill()
 		if err != nil {
-			utils.LogToKernel(fmt.Sprintf("ORK: error killing process with pid %v and name %v", p.Pid, name))
-			log.Warning("Error killing process", p.Pid)
+			utils.LogToKernel(fmt.Sprintf("ORK: error killing process with pid %v and name %v\n", p.Pid, name))
+			log.Error("Error killing process", p.Pid)
 			continue
 		}
 
-		utils.LogToKernel(fmt.Sprintf("ORK: successfully killed process with pid %v and name %v", p.Pid, name))
+		utils.LogToKernel(fmt.Sprintf("ORK: successfully killed process with pid %v and name %v\n", p.Pid, name))
 		log.Info("Successfully killed process", p.Pid, name)
 	}
 

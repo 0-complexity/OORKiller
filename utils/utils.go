@@ -2,9 +2,8 @@ package utils
 
 import (
 	"github.com/op/go-logging"
+	"os"
 	"sort"
-	"fmt"
-	"os/exec"
 )
 
 var log = logging.MustGetLogger("ORK")
@@ -24,11 +23,16 @@ func Sort(i sort.Interface) error {
 }
 
 func LogToKernel(message string) {
-	echo := fmt.Sprintf("echo \"%v\" > /dev/kmsg", message)
-	log.Info(echo)
-	cmdName := "sh"
-	cmdArgs := []string{"-c", echo}
-	if err := exec.Command(cmdName, cmdArgs...).Run(); err != nil {
-		log.Warning("Error logging message in /dev/kmsg:", message)
+	f, err := os.OpenFile("/dev/kmsg", os.O_WRONLY|os.O_APPEND, 0544)
+
+	if err != nil {
+		log.Error("Error opening /dev/kmsg")
+		return
+	}
+
+	defer f.Close()
+
+	if _, err := f.WriteString(message); err != nil {
+		log.Error("Error writing logs bla to /dev/kmsg", err)
 	}
 }
