@@ -11,7 +11,7 @@ import (
 var log = logging.MustGetLogger("ORK")
 
 // whiteListNames is slice of processes names that should never be killed.
-var whitelistNames = []string{"jsagent.py", "volumedriver"}
+var whitelistNames = []string{"jsagent.py", "volumedriver", "ORK"}
 
 type Sorter func([]*process.Process, int, int) bool
 
@@ -157,9 +157,9 @@ func KillProcesses(systemCheck func() (bool, error), sorter Sorter) error {
 	utils.Sort(&processesStruct)
 
 	for _, p := range processesStruct.Processes {
-		if memOk, memErr := systemCheck(); memErr != nil {
-			return memErr
-		} else if memOk {
+		if sysOk, sysErr := systemCheck(); sysErr != nil {
+			return sysErr
+		} else if sysOk {
 			return nil
 		}
 

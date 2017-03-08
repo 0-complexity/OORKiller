@@ -76,9 +76,9 @@ func DestroyDomains(systemCheck func() (bool, error), sorter Sorter) error {
 	}
 
 	for _, d := range domains.Domains {
-		if memOk, memErr := systemCheck(); memErr != nil {
-			return memErr
-		} else if memOk {
+		if sysOk, sysErr := systemCheck(); sysErr != nil {
+			return sysErr
+		} else if sysOk {
 			return nil
 		}
 
