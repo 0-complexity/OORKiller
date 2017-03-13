@@ -42,7 +42,7 @@ func Monitor() error {
 
 	// Memory consumption is above threshold.
 	// Destroy domains and re-check the memory
-	if err := domain.DestroyDomains(isMemoryOk, domain.DomainsByMem); err != nil {
+	if err := domain.DestroyDomains(isMemoryOk, domain.DomainsByMem, nil); err != nil {
 		return err
 	}
 
@@ -54,7 +54,7 @@ func Monitor() error {
 
 	// Memory consumption is still above threshold.
 	// Kill processes and re-check the memory
-	if err := process.KillProcesses(isMemoryOk, process.ProcessesByMem); err != nil {
+	if err := process.KillProcesses(isMemoryOk, process.ProcessesByMem, nil); err != nil {
 		return err
 	}
 
