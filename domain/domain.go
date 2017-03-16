@@ -6,6 +6,7 @@ import (
 	"github.com/libvirt/libvirt-go"
 	"github.com/op/go-logging"
 	"github.com/patrickmn/go-cache"
+	"github.com/shirou/gopsutil/cpu"
 	"time"
 )
 
@@ -16,10 +17,11 @@ var log = logging.MustGetLogger("ORK")
 type DomainCPUMap map[string]uint64
 
 type Domain struct {
-	domain      libvirt.Domain
-	memUsage    uint64
-	cpuTime     float64
-	cpuTimeDiff float64
+	domain         libvirt.Domain
+	memUsage       uint64
+	cpuUtilization float64
+	cpuTime        float64
+	cpuAvailable   float64
 }
 
 func (d Domain) GetDomain() libvirt.Domain {
@@ -27,7 +29,7 @@ func (d Domain) GetDomain() libvirt.Domain {
 }
 
 func (d Domain) CPU() float64 {
-	return d.cpuTimeDiff
+	return d.cpuUtilization
 }
 
 func (d Domain) Memory() uint64 {
@@ -66,7 +68,7 @@ func UpdateCache(c *cache.Cache) error {
 		return err
 	}
 
-	var cpuTimeDiff float64
+	var cpuUtilization float64
 
 	for _, domain := range domains {
 		name, err := domain.GetName()
@@ -80,14 +82,21 @@ func UpdateCache(c *cache.Cache) error {
 			continue
 		}
 		domainCpuTime := float64(info.CpuTime)
+		hostAvailableCPU, err := cpu.Times(false)
+		if err != nil {
+			log.Error("Error getting host cpu info")
+			continue
+		}
+		totalAvailable := hostAvailableCPU[0].Total()
 
 		if d, ok := c.Get(name); ok {
 			oldDomain := d.(Domain)
 			defer oldDomain.domain.Free()
-			cpuTimeDiff = domainCpuTime - oldDomain.cpuTime
+
+			cpuUtilization = (domainCpuTime - oldDomain.cpuTime) / (totalAvailable - oldDomain.cpuAvailable)
 		}
 
-		c.Set(name, Domain{domain, info.MaxMem, domainCpuTime, cpuTimeDiff}, time.Minute)
+		c.Set(name, Domain{domain, info.MaxMem, cpuUtilization, domainCpuTime, totalAvailable}, time.Minute)
 	}
 
 	return nil
