@@ -22,6 +22,10 @@ type Domain struct {
 	cpuTimeDiff float64
 }
 
+func (d Domain) GetDomain() libvirt.Domain {
+	return d.domain
+}
+
 func (d Domain) CPU() float64 {
 	return d.cpuTimeDiff
 }
@@ -79,6 +83,7 @@ func UpdateCache(c *cache.Cache) error {
 
 		if d, ok := c.Get(name); ok {
 			oldDomain := d.(Domain)
+			defer oldDomain.domain.Free()
 			cpuTimeDiff = domainCpuTime - oldDomain.cpuTime
 		}
 

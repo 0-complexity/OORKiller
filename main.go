@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/0-complexity/ORK/activity"
 	"github.com/0-complexity/ORK/cpu"
 	"github.com/0-complexity/ORK/domain"
 	"github.com/0-complexity/ORK/memory"
@@ -47,6 +48,8 @@ func updateCache(c *cache.Cache) error {
 
 func main() {
 	c := cache.New(cache.NoExpiration, time.Minute)
+	c.OnEvicted(activity.EvictActivity)
+
 	go updateCache(c)
 	go monitorMemory(c)
 	go monitorCPU(c)

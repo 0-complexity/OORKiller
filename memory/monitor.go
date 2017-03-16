@@ -9,7 +9,7 @@ import (
 )
 
 // memoryThreshold is the value in MB at which ORK should free-up memory
-const memoryThreshold uint64 = 2400
+const memoryThreshold uint64 = 100
 
 var log = logging.MustGetLogger("ORK")
 

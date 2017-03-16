@@ -1,6 +1,7 @@
 package activity
 
 import (
+	"github.com/0-complexity/ORK/domain"
 	"github.com/patrickmn/go-cache"
 	"sort"
 )
@@ -55,4 +56,12 @@ func GetActivities(c *cache.Cache, sorter Sorter) []Activity {
 	sort.Sort(allActivities)
 
 	return allActivities.Activities
+}
+
+func EvictActivity(key string, obj interface{}) {
+	switch t := obj.(type) {
+	case domain.Domain:
+		dom := t.GetDomain()
+		defer dom.Free()
+	}
 }
