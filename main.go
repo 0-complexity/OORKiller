@@ -12,51 +12,43 @@ import (
 
 var log = logging.MustGetLogger("ORK")
 
-func monitorMemory() error {
+func monitorMemory(c *cache.Cache) error {
 	for {
-		err := memory.Monitor()
-		if err != nil {
+		if err := memory.Monitor(c); err != nil {
 			log.Error(err)
 		}
-		time.Sleep(1 * time.Second)
+		time.Sleep(time.Second)
 	}
 }
 
 func monitorCPU(c *cache.Cache) error {
 	for {
-		err := cpu.Monitor(c)
-		if err != nil {
+		if err := cpu.Monitor(c); err != nil {
 			log.Error(err)
 		}
-		time.Sleep(1 * time.Second)
+		time.Sleep(time.Second)
 	}
 }
 
-func setDomainsCPUTime(c *cache.Cache) error {
+func updateCache(c *cache.Cache) error {
 	for {
-		err := domain.SetDomainCPUTime(c)
-		if err != nil {
-			log.Error(err)
-		}
-		time.Sleep(1 * time.Second)
-	}
-}
 
-func setProcessesCPUTime(c *cache.Cache) error {
-	for {
-		err := process.SetProcessCPUUsage(c)
-		if err != nil {
+		if err := domain.UpdateCache(c); err != nil {
 			log.Error(err)
 		}
-		time.Sleep(1 * time.Second)
+
+		if err := process.UpdateCache(c); err != nil {
+			log.Error(err)
+		}
+
+		time.Sleep(time.Second)
 	}
 }
 
 func main() {
-	c := cache.New(cache.NoExpiration, 0)
-	go setDomainsCPUTime(c)
-	go setProcessesCPUTime(c)
-	go monitorMemory()
+	c := cache.New(cache.NoExpiration, time.Minute)
+	go updateCache(c)
+	go monitorMemory(c)
 	go monitorCPU(c)
 	//wait
 	select {}
