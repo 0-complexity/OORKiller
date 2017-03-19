@@ -12,11 +12,11 @@ type Activity interface {
 	Kill()
 	Priority() int
 }
-type Sorter func([]Activity, int, int) bool
+type Less func(Activity, Activity) bool
 
 type Activities struct {
 	Activities []Activity
-	Sort       Sorter
+	Sorter     Less
 }
 
 func (a Activities) Len() int { return len(a.Activities) }
@@ -26,25 +26,27 @@ func (a Activities) Swap(i, j int) {
 }
 
 func (a Activities) Less(i, j int) bool {
-	iP := a.Activities[i].Priority()
-	jP := a.Activities[j].Priority()
+	ai := a.Activities[i]
+	aj := a.Activities[j]
+	iP := ai.Priority()
+	jP := aj.Priority()
 
 	if iP != jP {
 		return iP > jP
 	}
 
-	return a.Sort(a.Activities, i, j)
+	return a.Sorter(ai, aj)
 }
 
-func ActivitiesByMem(a []Activity, i, j int) bool {
-	return a[i].Memory() > a[j].Memory()
+func ActivitiesByMem(ai, aj Activity) bool {
+	return ai.Memory() > aj.Memory()
 }
 
-func ActivitiesByCPU(a []Activity, i, j int) bool {
-	return a[i].CPU() > a[j].CPU()
+func ActivitiesByCPU(ai, aj Activity) bool {
+	return ai.CPU() > aj.CPU()
 }
 
-func GetActivities(c *cache.Cache, sorter Sorter) []Activity {
+func GetActivities(c *cache.Cache, less Less) []Activity {
 	items := c.Items()
 	activities := make([]Activity, 0, c.ItemCount())
 
@@ -52,7 +54,7 @@ func GetActivities(c *cache.Cache, sorter Sorter) []Activity {
 		activities = append(activities, item.Object.(Activity))
 	}
 
-	allActivities := Activities{activities, sorter}
+	allActivities := Activities{activities, less}
 	sort.Sort(allActivities)
 
 	return allActivities.Activities
@@ -62,6 +64,6 @@ func EvictActivity(key string, obj interface{}) {
 	switch t := obj.(type) {
 	case domain.Domain:
 		dom := t.GetDomain()
-		defer dom.Free()
+		dom.Free()
 	}
 }

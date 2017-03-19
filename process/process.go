@@ -2,12 +2,13 @@ package process
 
 import (
 	"fmt"
+	"strings"
+	"time"
+
 	"github.com/0-complexity/ORK/utils"
 	"github.com/op/go-logging"
 	"github.com/patrickmn/go-cache"
 	"github.com/shirou/gopsutil/process"
-	"strings"
-	"time"
 )
 
 var log = logging.MustGetLogger("ORK")
@@ -48,15 +49,15 @@ func (p Process) Kill() {
 		name = "unknown"
 	}
 
-	utils.LogToKernel(fmt.Sprintf("ORK: attempting to kill process with pid %v and name %v\n", pid, name))
+	utils.LogToKernel("ORK: attempting to kill process with pid %v and name %v\n", pid, name)
 
 	if err = proc.Kill(); err != nil {
-		utils.LogToKernel(fmt.Sprintf("ORK: error killing process with pid %v and name %v\n", pid, name))
+		utils.LogToKernel("ORK: error killing process with pid %v and name %v\n", pid, name)
 		log.Error("Error killing process", pid)
 		return
 	}
 
-	utils.LogToKernel(fmt.Sprintf("ORK: successfully killed process with pid %v and name %v\n", pid, name))
+	utils.LogToKernel("ORK: successfully killed process with pid %v and name %v\n", pid, name)
 	log.Info("Successfully killed process", pid, name)
 	return
 }

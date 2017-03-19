@@ -1,13 +1,13 @@
 package domain
 
 import (
-	"fmt"
+	"time"
+
 	"github.com/0-complexity/ORK/utils"
 	"github.com/libvirt/libvirt-go"
 	"github.com/op/go-logging"
 	"github.com/patrickmn/go-cache"
 	"github.com/shirou/gopsutil/cpu"
-	"time"
 )
 
 const connectionURI string = "qemu:///system"
@@ -48,15 +48,15 @@ func (d Domain) Kill() {
 		name = "unknown"
 	}
 
-	utils.LogToKernel(fmt.Sprintf("ORK: attempting to destroy machine %v\n", name))
+	utils.LogToKernel("ORK: attempting to destroy machine %v\n", name)
 
 	if err = dom.DestroyFlags(1); err != nil {
-		utils.LogToKernel(fmt.Sprintf("ORK: error destroying machine %v\n", name))
+		utils.LogToKernel("ORK: error destroying machine %v\n", name)
 		log.Error("Error destroying machine", name)
 		return
 	}
 
-	utils.LogToKernel(fmt.Sprintf("ORK: successfully destroyed machine %v\n", name))
+	utils.LogToKernel("ORK: successfully destroyed machine %v\n", name)
 	log.Debug("Successfully destroyed domain ", name)
 	return
 }
@@ -91,7 +91,7 @@ func UpdateCache(c *cache.Cache) error {
 
 		if d, ok := c.Get(name); ok {
 			oldDomain := d.(Domain)
-			defer oldDomain.domain.Free()
+			oldDomain.domain.Free()
 
 			cpuUtilization = (domainCpuTime - oldDomain.cpuTime) / (totalAvailable - oldDomain.cpuAvailable)
 		}
