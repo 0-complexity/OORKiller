@@ -2,10 +2,13 @@ package process
 
 import (
 	"fmt"
+	"strings"
+	"time"
+
 	"github.com/0-complexity/ORK/utils"
 	"github.com/op/go-logging"
+	"github.com/patrickmn/go-cache"
 	"github.com/shirou/gopsutil/process"
-	"strings"
 )
 
 var log = logging.MustGetLogger("ORK")
@@ -13,69 +16,120 @@ var log = logging.MustGetLogger("ORK")
 // whiteListNames is slice of processes names that should never be killed.
 var whitelistNames = []string{"jsagent.py", "volumedriver", "ORK"}
 
-type Sorter func([]*process.Process, int, int) bool
+type processesMap map[int32]*process.Process
+type whiteListMap map[int32]bool
 
 // Processes is a struct of a list of process.Process and a function to be
 // used to sort the list.
-type Processes struct {
-	Processes []*process.Process
-	Sort      Sorter
+type Process struct {
+	process  *process.Process
+	memUsage uint64
+	cpuUsage float64
 }
 
-func (p *Processes) Len() int { return len(p.Processes) }
-func (p *Processes) Swap(i, j int) {
-	p.Processes[i], p.Processes[j] = p.Processes[j], p.Processes[i]
+func (p Process) CPU() float64 {
+	return p.cpuUsage
 }
 
-func (p *Processes) Less(i, j int) bool {
-
-	return p.Sort(p.Processes, i, j)
+func (p Process) Memory() uint64 {
+	return p.memUsage
 }
 
-// ProcessesByMem sorts processes by memory consumption in a descending order
-func ProcessesByMem(p []*process.Process, i, j int) bool {
-	iInfo, err := p[i].MemoryInfo()
+func (p Process) Priority() int {
+	return 10
+}
+
+func (p Process) Kill() {
+	proc := p.process
+	pid := proc.Pid
+
+	name, err := proc.Name()
 	if err != nil {
-		panic(err)
+		log.Error("Error getting process name")
+		name = "unknown"
 	}
-	jInfo, err := p[j].MemoryInfo()
+
+	utils.LogToKernel("ORK: attempting to kill process with pid %v and name %v\n", pid, name)
+
+	if err = proc.Kill(); err != nil {
+		utils.LogToKernel("ORK: error killing process with pid %v and name %v\n", pid, name)
+		log.Error("Error killing process", pid)
+		return
+	}
+
+	utils.LogToKernel("ORK: successfully killed process with pid %v and name %v\n", pid, name)
+	log.Info("Successfully killed process", pid, name)
+	return
+}
+func UpdateCache(c *cache.Cache) error {
+	pMap, err := makeProcessesMap()
 	if err != nil {
-		panic(err)
+		log.Error("Error getting processes")
+		return err
 	}
-	return iInfo.RSS > jInfo.RSS
+
+	whiteList, err := setupWhiteList(pMap)
+	if err != nil {
+		log.Error("Error setting up processes ")
+		return err
+	}
+
+	for pid, proc := range pMap {
+		if killable, err := isProcessKillable(proc, pMap, whiteList); err != nil {
+			log.Error("Error checking if process is killable")
+			continue
+		} else if killable == false {
+			continue
+		}
+
+		key := string(pid)
+		if p, ok := c.Get(key); ok == true {
+			proc = p.(Process).process
+		}
+
+		percent, err := proc.Percent(0)
+		if err != nil {
+			log.Error("Error getting process cpu percentage")
+			continue
+		}
+
+		memory, err := proc.MemoryInfo()
+		if err != nil {
+			log.Error("Error getting process memory info")
+			continue
+		}
+
+		c.Set(key, Process{proc, memory.RSS, percent}, time.Minute)
+	}
+
+	return nil
 }
 
-// MakeProcesses returns a list or process.Process instances
-func MakeProcesses() ([]*process.Process, error) {
+// MakeProcessesMap returns a map of process pid and process.Process instance for all running processes
+func makeProcessesMap() (processesMap, error) {
+	pMap := make(processesMap)
+
 	processesIds, err := process.Pids()
 	if err != nil {
 		return nil, err
 	}
 
-	processes := make([]*process.Process, len(processesIds))
-	for index, pid := range processesIds {
-		p, _ := process.NewProcess(pid)
-		processes[index] = p
+	for _, pid := range processesIds {
+		p, err := process.NewProcess(pid)
+		if err != nil {
+			return nil, err
+		}
+		pMap[p.Pid] = p
 	}
-	return processes, nil
-}
 
-// MakeProcessesMap returns a map of process pid and process.Process instance for all running processes
-func MakeProcessesMap(processes []*process.Process) map[int32]*process.Process {
-	processesMap := make(map[int32]*process.Process)
-
-	for _, p := range processes {
-		processesMap[p.Pid] = p
-
-	}
-	return processesMap
+	return pMap, nil
 }
 
 // SetupWhiteList returns a map of pid and process.Process instance for whitelisted processes.
-func SetupWhiteList(processes []*process.Process) (map[int32]*process.Process, error) {
-	whiteList := make(map[int32]*process.Process)
+func setupWhiteList(pMap processesMap) (whiteListMap, error) {
+	whiteList := make(whiteListMap)
 
-	for _, p := range processes {
+	for _, p := range pMap {
 		processName, err := p.Name()
 		if err != nil {
 			log.Debug("Erorr getting process name")
@@ -84,18 +138,13 @@ func SetupWhiteList(processes []*process.Process) (map[int32]*process.Process, e
 
 		for _, name := range whitelistNames {
 			if match := strings.Contains(processName, name); match {
-				whiteList[p.Pid] = p
+				whiteList[p.Pid] = true
 				break
 			}
 		}
 	}
-	kernelProcess, err := process.NewProcess(int32(2))
-	if err != nil {
-		log.Debug("Error getting kernel process with pid 2")
-		return nil, err
-	}
-
-	whiteList[kernelProcess.Pid] = kernelProcess
+	whiteList[int32(2)] = true
+	whiteList[int32(1)] = true
 
 	return whiteList, nil
 }
@@ -103,93 +152,33 @@ func SetupWhiteList(processes []*process.Process) (map[int32]*process.Process, e
 // IsProcessKillable checks if a process can be killed or not.
 // A process can't be killed if it is a member of the whiteList or if it is a child of a process in the
 // whiteList.
-func IsProcessKillable(p *process.Process, pMap map[int32]*process.Process, whiteList map[int32]*process.Process) (bool, error) {
-	_, whiteListed := whiteList[p.Pid]
-	if whiteListed || p.Pid == 1 {
+func isProcessKillable(p *process.Process, pMap processesMap, whiteList whiteListMap) (bool, error) {
+	if whiteList[p.Pid] {
 		return false, nil
 	}
-	pPid, err := p.Ppid()
-
-	for pPid != 0 {
-		if err != nil {
-			log.Debug("Error getting parent pid for pid", p.Pid)
-			return false, err
-		}
-		if pPid == 1 {
-			return true, nil
-		}
-
-		if _, ok := whiteList[pPid]; ok {
-			return false, nil
-		}
-
-		p, inMap := pMap[pPid]
-		if inMap != true {
-			message := fmt.Sprintf("Error getting process %v from process map", p.Pid)
-			log.Debug(message)
-			return false, fmt.Errorf(message)
-
-		}
-		pPid, err = p.Ppid()
-	}
-	return true, nil
+	return isParentKillable(p, pMap, whiteList)
 }
 
-// KillProcesses kills processes to free up memory.
-// systemCheck is the function used to determine if the system state is ok or not.
-// sorter is the sorting function used to sort processes.
-func KillProcesses(systemCheck func() (bool, error), sorter Sorter) error {
-	processes, err := MakeProcesses()
+func isParentKillable(p *process.Process, pMap processesMap, whiteList whiteListMap) (bool, error) {
+	pPid, err := p.Ppid()
 	if err != nil {
-		log.Debug("Error listing processes")
-		return nil
-
-	}
-	processesMap := MakeProcessesMap(processes)
-	whiteListPids, err := SetupWhiteList(processes)
-
-	if err != nil {
-		log.Debug("Error setting up processes whitelist")
-		return err
+		log.Debug("Error getting parent pid for pid", p.Pid)
+		return false, err
 	}
 
-	processesStruct := Processes{processes, sorter}
-	utils.Sort(&processesStruct)
-
-	for _, p := range processesStruct.Processes {
-		if sysOk, sysErr := systemCheck(); sysErr != nil {
-			return sysErr
-		} else if sysOk {
-			return nil
-		}
-
-		killable, err := IsProcessKillable(p, processesMap, whiteListPids)
-		if err != nil {
-			log.Debug("Error checking is process is killable")
-			continue
-		}
-
-		if !killable {
-			continue
-		}
-
-		name, err := p.Name()
-		if err != nil {
-			log.Error("Error getting process name")
-			name = "unknown"
-		}
-
-		utils.LogToKernel(fmt.Sprintf("ORK: attempting to kill process with pid %v and name %v\n", p.Pid, name))
-		err = p.Kill()
-		if err != nil {
-			utils.LogToKernel(fmt.Sprintf("ORK: error killing process with pid %v and name %v\n", p.Pid, name))
-			log.Error("Error killing process", p.Pid)
-			continue
-		}
-
-		utils.LogToKernel(fmt.Sprintf("ORK: successfully killed process with pid %v and name %v\n", p.Pid, name))
-		log.Info("Successfully killed process", p.Pid, name)
+	if pPid == 1 {
+		return true, nil
 	}
 
-	return nil
+	if whiteList[pPid] {
+		return false, nil
+	}
+
+	parent, inMap := pMap[pPid]
+	if inMap != true {
+		message := fmt.Sprintf("Error getting process %v from process map", p.Pid)
+		log.Debug(message)
+		return false, fmt.Errorf(message)
+	}
+	return isParentKillable(parent, pMap, whiteList)
 }

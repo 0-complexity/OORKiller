@@ -1,103 +1,121 @@
 package domain
 
 import (
-	"fmt"
+	"time"
+
 	"github.com/0-complexity/ORK/utils"
-	libvirt "github.com/libvirt/libvirt-go"
+	"github.com/libvirt/libvirt-go"
 	"github.com/op/go-logging"
+	"github.com/patrickmn/go-cache"
+	"github.com/shirou/gopsutil/cpu"
 )
 
 const connectionURI string = "qemu:///system"
 
 var log = logging.MustGetLogger("ORK")
 
-type Sorter func([]libvirt.Domain, int, int) bool
+type DomainCPUMap map[string]uint64
 
-// Domains is a list of libvirt.Domains
-type Domains struct {
-	Domains []libvirt.Domain
-	Sort    Sorter
+type Domain struct {
+	domain         libvirt.Domain
+	memUsage       uint64
+	cpuUtilization float64
+	cpuTime        float64
+	cpuAvailable   float64
 }
 
-func (d *Domains) Free() {
-	for _, domain := range d.Domains {
-		domain.Free()
-	}
+func (d Domain) GetDomain() libvirt.Domain {
+	return d.domain
 }
 
-func (d *Domains) Len() int { return len(d.Domains) }
-func (d *Domains) Swap(i, j int) {
-	d.Domains[i], d.Domains[j] = d.Domains[j], d.Domains[i]
+func (d Domain) CPU() float64 {
+	return d.cpuUtilization
 }
 
-func (d *Domains) Less(i, j int) bool {
-
-	return d.Sort(d.Domains, i, j)
+func (d Domain) Memory() uint64 {
+	return d.memUsage
 }
 
-// DomainByMem sorts domains by memory consumption in a descending order
-func DomainsByMem(d []libvirt.Domain, i, j int) bool {
-	diInfo, err := d[i].GetInfo()
+func (d Domain) Priority() int {
+	return 100
+}
+
+func (d Domain) Kill() {
+	dom := d.domain
+	name, err := dom.GetName()
 	if err != nil {
-		panic(err)
+		log.Error("Error getting domain name")
+		name = "unknown"
 	}
-	djInfo, err := d[j].GetInfo()
-	if err != nil {
-		panic(err)
+
+	utils.LogToKernel("ORK: attempting to destroy machine %v\n", name)
+
+	if err = dom.DestroyFlags(1); err != nil {
+		utils.LogToKernel("ORK: error destroying machine %v\n", name)
+		log.Error("Error destroying machine", name)
+		return
 	}
-	return diInfo.MaxMem > djInfo.MaxMem
+
+	utils.LogToKernel("ORK: successfully destroyed machine %v\n", name)
+	log.Debug("Successfully destroyed domain ", name)
+	return
 }
 
-// DestroyDomains destroys domains to free up memory.
-// systemCheck is the function used to determine if the system state is ok or not.
-// sorter is the sorting function used to sort domains.
-func DestroyDomains(systemCheck func() (bool, error), sorter Sorter) error {
+func UpdateCache(c *cache.Cache) error {
+	domains, err := getDomains()
+	if err != nil {
+		log.Debug("Error getting domains")
+		return err
+	}
+
+	var cpuUtilization float64
+
+	for _, domain := range domains {
+		name, err := domain.GetName()
+		if err != nil {
+			log.Error("Error getting domain name")
+			continue
+		}
+		info, err := domain.GetInfo()
+		if err != nil {
+			log.Error("Error getting domain info")
+			continue
+		}
+		domainCpuTime := float64(info.CpuTime)
+		hostAvailableCPU, err := cpu.Times(false)
+		if err != nil {
+			log.Error("Error getting host cpu info")
+			continue
+		}
+		totalAvailable := hostAvailableCPU[0].Total()
+
+		if d, ok := c.Get(name); ok {
+			oldDomain := d.(Domain)
+			oldDomain.domain.Free()
+
+			cpuUtilization = (domainCpuTime - oldDomain.cpuTime) / (totalAvailable - oldDomain.cpuAvailable)
+		}
+
+		c.Set(name, Domain{domain, info.MaxMem, cpuUtilization, domainCpuTime, totalAvailable}, time.Minute)
+	}
+
+	return nil
+}
+
+func getDomains() ([]libvirt.Domain, error) {
 	conn, err := libvirt.NewConnect(connectionURI)
 
 	if err != nil {
 		log.Debug("Error connecting to qemu")
-		return err
+		return nil, err
 	}
 	defer conn.Close()
 
-	doms, err := conn.ListAllDomains(libvirt.CONNECT_LIST_DOMAINS_ACTIVE)
+	domains, err := conn.ListAllDomains(libvirt.CONNECT_LIST_DOMAINS_ACTIVE)
 	if err != nil {
 		log.Debug("Error listing domains")
-		return err
+		return nil, err
 	}
 
-	domains := Domains{doms, sorter}
-	defer domains.Free()
-
-	err = utils.Sort(&domains)
-	if err != nil {
-		log.Debug("Error sorting domains")
-		return err
-	}
-
-	for _, d := range domains.Domains {
-		if sysOk, sysErr := systemCheck(); sysErr != nil {
-			return sysErr
-		} else if sysOk {
-			return nil
-		}
-
-		name, err := d.GetName()
-		if err != nil {
-			log.Error("Error getting domain name")
-			name = "unknown"
-		}
-
-		utils.LogToKernel(fmt.Sprintf("ORK: attempting to destroy machine %v\n", name))
-		err = d.DestroyFlags(1)
-		if err != nil {
-			utils.LogToKernel(fmt.Sprintf("ORK: error destroying machine %v\n", name))
-			log.Error("Error destroying machine", name)
-			continue
-		}
-		utils.LogToKernel(fmt.Sprintf("ORK: successfully destroyed machine %v\n", name))
-		log.Info("Successfully destroyed", name)
-
-	}
-	return nil
+	return domains, nil
 }

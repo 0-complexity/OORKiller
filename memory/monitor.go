@@ -2,9 +2,9 @@
 package memory
 
 import (
-	"github.com/0-complexity/ORK/domain"
-	"github.com/0-complexity/ORK/process"
+	"github.com/0-complexity/ORK/activity"
 	"github.com/op/go-logging"
+	"github.com/patrickmn/go-cache"
 	"github.com/shirou/gopsutil/mem"
 )
 
@@ -13,54 +13,45 @@ const memoryThreshold uint64 = 100
 
 var log = logging.MustGetLogger("ORK")
 
-// isMemoryOk returns a true if the memory consumption is below the defined threshold
+// isMemoryOk returns true if the available is above memoryThreshold
+// and false otherwise
 func isMemoryOk() (bool, error) {
-	if v, err := mem.VirtualMemory(); err != nil {
+	v, err := mem.VirtualMemory()
+	if err != nil {
 		log.Debug("Error getting available memory")
 		return false, err
-	} else {
-		if availableMem := v.Available / (1024 * 1024); availableMem > memoryThreshold {
-			log.Debug("Memory consumption is below threshold")
-			return true, nil
-		}
-		log.Warning("Memory consumption is above threshold")
-		return false, nil
 	}
+
+	if availableMem := v.Available / (1024 * 1024); availableMem > memoryThreshold {
+		log.Debug("Memory consumption is below threshold")
+		return true, nil
+	}
+
+	log.Debug("Memory consumption is above threshold")
+	return false, nil
 }
 
-// Monitor checks the memory consumption and if it exceeds the defined threshold it kills
-// virtual machines and processes until the consumption is bellow the threshold.
-func Monitor() error {
+// Monitor checks the memory consumption and if the available memory is below memoryThreshold it kills
+// activities until available memory is more than
+func Monitor(c *cache.Cache) error {
 	log.Info("Monitoring memory")
 
-	if memOk, err := isMemoryOk(); err != nil {
+	memOk, err := isMemoryOk()
+	if err != nil {
 		return err
-	} else if memOk {
-		// Memory consumption is below threshold, there is no need to kill domains/processes
+	}
+	if memOk == true {
 		return nil
 	}
 
-	// Memory consumption is above threshold.
-	// Destroy domains and re-check the memory
-	if err := domain.DestroyDomains(isMemoryOk, domain.DomainsByMem); err != nil {
-		return err
-	}
+	activities := activity.GetActivities(c, activity.ActivitiesByMem)
 
-	if memOk, err := isMemoryOk(); err != nil {
-		return err
-	} else if memOk {
-		return nil
+	for i := 0; i < len(activities) && memOk == false; i++ {
+		activ := activities[i]
+		activ.Kill()
+		if memOk, err = isMemoryOk(); err != nil {
+			return err
+		}
 	}
-
-	// Memory consumption is still above threshold.
-	// Kill processes and re-check the memory
-	if err := process.KillProcesses(isMemoryOk, process.ProcessesByMem); err != nil {
-		return err
-	}
-
-	if _, err := isMemoryOk(); err != nil {
-		return err
-	} else {
-		return nil
-	}
+	return nil
 }

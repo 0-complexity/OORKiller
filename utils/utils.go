@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"fmt"
 	"github.com/op/go-logging"
 	"os"
 	"sort"
@@ -22,7 +23,8 @@ func Sort(i sort.Interface) error {
 	return err
 }
 
-func LogToKernel(message string) {
+func LogToKernel(message string, a ...interface{}) {
+
 	f, err := os.OpenFile("/dev/kmsg", os.O_WRONLY|os.O_APPEND, 0544)
 
 	if err != nil {
@@ -32,7 +34,7 @@ func LogToKernel(message string) {
 
 	defer f.Close()
 
-	if _, err := f.WriteString(message); err != nil {
+	if _, err := f.WriteString(fmt.Sprintf(message, a...)); err != nil {
 		log.Error("Error writing logs bla to /dev/kmsg", err)
 	}
 }
