@@ -3,7 +3,9 @@ package utils
 import (
 	"fmt"
 	"github.com/op/go-logging"
+	"io/ioutil"
 	"os"
+	"path/filepath"
 	"sort"
 )
 
@@ -35,6 +37,50 @@ func LogToKernel(message string, a ...interface{}) {
 	defer f.Close()
 
 	if _, err := f.WriteString(fmt.Sprintf(message, a...)); err != nil {
-		log.Error("Error writing logs bla to /dev/kmsg", err)
+		log.Error("Error writing logs to /dev/kmsg:", err)
 	}
+}
+
+func RemoveDirContents(path string) {
+	log.Debugf("Deleting contents of %v", path)
+
+	files, err := ioutil.ReadDir(path)
+	if err != nil {
+		log.Errorf("Error listing contents of dir %v: %v", path, err)
+		return
+	}
+
+	for _, file := range files {
+		if err = os.RemoveAll(filepath.Join(path, file.Name())); err != nil {
+			log.Errorf("Error removing %v", file)
+		} else {
+			log.Debugf("Successfully deleted %v", file)
+		}
+	}
+}
+
+func RemoveFilesWithPattern(pattern string) {
+	log.Debugf("Removing files with pattern %v", pattern)
+	files, err := filepath.Glob(pattern)
+	if err != nil {
+		log.Errorf("Error listing files matching the pattern %v: %v", pattern, err)
+	}
+
+	for _, file := range files {
+		log.Info(files)
+		if info, err := os.Stat(file); err != nil {
+			log.Errorf("Error getting stat for %v: %v", file, err)
+			continue
+		} else if info.IsDir() {
+			log.Debugf("Skip deleting %v, it is not a file.")
+			continue
+		}
+
+		if err = os.RemoveAll(file); err != nil {
+			log.Errorf("Error removing %v", file)
+			continue
+		}
+		log.Debugf("Successfully deleted %v", file)
+	}
+
 }
