@@ -18,7 +18,7 @@ var log = logging.MustGetLogger("ORK")
 func isMemoryOk() (bool, error) {
 	v, err := mem.VirtualMemory()
 	if err != nil {
-		log.Debug("Error getting available memory")
+		log.Error("Error getting available memory")
 		return false, err
 	}
 

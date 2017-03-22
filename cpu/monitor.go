@@ -21,11 +21,11 @@ func isCPUOk() (bool, error) {
 	}
 
 	if percent[0] < cpuThreshold {
-		log.Debug("CPU consumption is below threshold: ", percent[0])
+		log.Debugf("CPU consumption is below threshold: %v", percent[0])
 		return true, nil
 	}
 
-	log.Debug("CPU consumption is above threshold:", percent[0])
+	log.Debugf("CPU consumption is above threshold: %v", percent[0])
 	return false, nil
 }
 
