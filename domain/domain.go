@@ -52,19 +52,19 @@ func (d Domain) Kill() {
 
 	if err = dom.DestroyFlags(1); err != nil {
 		utils.LogToKernel("ORK: error destroying machine %v\n", name)
-		log.Error("Error destroying machine", name)
+		log.Errorf("Error destroying machine %v", name)
 		return
 	}
 
 	utils.LogToKernel("ORK: successfully destroyed machine %v\n", name)
-	log.Debug("Successfully destroyed domain ", name)
+	log.Debugf("Successfully destroyed domain %v", name)
 	return
 }
 
 func UpdateCache(c *cache.Cache) error {
 	domains, err := getDomains()
 	if err != nil {
-		log.Debug("Error getting domains")
+		log.Error("Error getting domains")
 		return err
 	}
 
@@ -78,7 +78,7 @@ func UpdateCache(c *cache.Cache) error {
 		}
 		info, err := domain.GetInfo()
 		if err != nil {
-			log.Error("Error getting domain info")
+			log.Errorf("Error getting info of domain %v", name)
 			continue
 		}
 		domainCpuTime := float64(info.CpuTime)
@@ -106,14 +106,14 @@ func getDomains() ([]libvirt.Domain, error) {
 	conn, err := libvirt.NewConnect(connectionURI)
 
 	if err != nil {
-		log.Debug("Error connecting to qemu")
+		log.Error("Error connecting to qemu")
 		return nil, err
 	}
 	defer conn.Close()
 
 	domains, err := conn.ListAllDomains(libvirt.CONNECT_LIST_DOMAINS_ACTIVE)
 	if err != nil {
-		log.Debug("Error listing domains")
+		log.Error("Error listing domains")
 		return nil, err
 	}
 

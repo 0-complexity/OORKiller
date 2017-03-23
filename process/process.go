@@ -45,7 +45,7 @@ func (p Process) Kill() {
 
 	name, err := proc.Name()
 	if err != nil {
-		log.Error("Error getting process name")
+		log.Errorf("Error getting name of process %v", pid)
 		name = "unknown"
 	}
 
@@ -53,12 +53,12 @@ func (p Process) Kill() {
 
 	if err = proc.Kill(); err != nil {
 		utils.LogToKernel("ORK: error killing process with pid %v and name %v\n", pid, name)
-		log.Error("Error killing process", pid)
+		log.Errorf("Error killing process %v", pid)
 		return
 	}
 
 	utils.LogToKernel("ORK: successfully killed process with pid %v and name %v\n", pid, name)
-	log.Info("Successfully killed process", pid, name)
+	log.Infof("Successfully killed process %v", pid)
 	return
 }
 func UpdateCache(c *cache.Cache) error {
@@ -70,15 +70,15 @@ func UpdateCache(c *cache.Cache) error {
 
 	whiteList, err := setupWhiteList(pMap)
 	if err != nil {
-		log.Error("Error setting up processes ")
+		log.Error("Error setting up whitelisted processes")
 		return err
 	}
 
 	for pid, proc := range pMap {
-		if killable, err := isProcessKillable(proc, pMap, whiteList); err != nil {
-			log.Error("Error checking if process is killable")
+		if kill, err := isProcessKillable(proc, pMap, whiteList); err != nil {
+			log.Errorf("Error checking if process %v is killable", pid)
 			continue
-		} else if killable == false {
+		} else if kill == false {
 			continue
 		}
 
@@ -89,13 +89,13 @@ func UpdateCache(c *cache.Cache) error {
 
 		percent, err := proc.Percent(0)
 		if err != nil {
-			log.Error("Error getting process cpu percentage")
+			log.Errorf("Error getting process %v cpu percentage", pid)
 			continue
 		}
 
 		memory, err := proc.MemoryInfo()
 		if err != nil {
-			log.Error("Error getting process memory info")
+			log.Errorf("Error getting process %v memory info", pid)
 			continue
 		}
 
@@ -132,7 +132,7 @@ func setupWhiteList(pMap processesMap) (whiteListMap, error) {
 	for _, p := range pMap {
 		processName, err := p.Name()
 		if err != nil {
-			log.Debug("Erorr getting process name")
+			log.Errorf("Erorr getting process %v name", p.Pid)
 			return nil, err
 		}
 
@@ -162,7 +162,7 @@ func isProcessKillable(p *process.Process, pMap processesMap, whiteList whiteLis
 func isParentKillable(p *process.Process, pMap processesMap, whiteList whiteListMap) (bool, error) {
 	pPid, err := p.Ppid()
 	if err != nil {
-		log.Debug("Error getting parent pid for pid", p.Pid)
+		log.Errorf("Error getting parent pid for process %v", p.Pid)
 		return false, err
 	}
 
@@ -177,7 +177,7 @@ func isParentKillable(p *process.Process, pMap processesMap, whiteList whiteList
 	parent, inMap := pMap[pPid]
 	if inMap != true {
 		message := fmt.Sprintf("Error getting process %v from process map", p.Pid)
-		log.Debug(message)
+		log.Error(message)
 		return false, fmt.Errorf(message)
 	}
 	return isParentKillable(parent, pMap, whiteList)
