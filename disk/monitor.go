@@ -18,15 +18,15 @@ type Deletable struct {
 	deleteFunc func(string)
 }
 
-const diskThreshold uint64 = 104857600
-const inodeThreshold uint64 = 10485760
+const diskThreshold uint64 = 104857600 // Threshold is in bytes and it is equal to 100 MB
+const inodeThreshold uint64 = 104858 // Threshold is in bytes and it is equal to approx 0.1 MB
 
 var log = logging.MustGetLogger("ORK")
 
 var deletableDirs = []string{"/opt/jumpscale7/var/log/", "/var/log/ovs/"}
 var deletablePatterns = []string{"/var/log/syslog*"}
 
-var customThreshold = map[string]Threshold{"/": Threshold{209715200, 20971520}}
+var customThreshold = map[string]Threshold{"/": Threshold{209715200, 524288}}
 
 func addPartitionsDeletables(partitions []disk.PartitionStat, logs []string, deleteFunc func(string), partitionsDeletables map[disk.PartitionStat][]Deletable) {
 	for _, path := range logs {
