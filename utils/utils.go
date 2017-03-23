@@ -51,10 +51,11 @@ func RemoveDirContents(path string) {
 	}
 
 	for _, file := range files {
-		if err = os.RemoveAll(filepath.Join(path, file.Name())); err != nil {
-			log.Errorf("Error removing %v", file)
+		filePath := filepath.Join(path, file.Name())
+		if err = os.RemoveAll(filePath); err != nil {
+			log.Errorf("Error removing %v", filePath)
 		} else {
-			log.Debugf("Successfully deleted %v", file)
+			log.Debugf("Successfully deleted %v", filePath)
 		}
 	}
 }
@@ -67,7 +68,6 @@ func RemoveFilesWithPattern(pattern string) {
 	}
 
 	for _, file := range files {
-		log.Info(files)
 		if info, err := os.Stat(file); err != nil {
 			log.Errorf("Error getting stat for %v: %v", file, err)
 			continue

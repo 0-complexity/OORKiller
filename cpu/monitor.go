@@ -8,7 +8,7 @@ import (
 	ps_cpu "github.com/shirou/gopsutil/cpu"
 )
 
-const cpuThreshold float64 = 90.0 // cpuThreshold holds the value of the memory threshold
+const cpuThreshold float64 = 90.0 // cpuThreshold holds the value of the cpu threshold
 var log = logging.MustGetLogger("ORK")
 
 // isCPUOk returns a true if the CPU consumption is below the defined threshold
