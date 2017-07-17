@@ -3,11 +3,11 @@ package domain
 import (
 	"time"
 
-	"github.com/0-complexity/ORK/utils"
 	"github.com/libvirt/libvirt-go"
 	"github.com/op/go-logging"
 	"github.com/patrickmn/go-cache"
 	"github.com/shirou/gopsutil/cpu"
+	"github.com/zero-os/ORK/utils"
 )
 
 const connectionURI string = "qemu:///system"
@@ -19,6 +19,7 @@ type DomainCPUMap map[string]uint64
 type Domain struct {
 	domain         libvirt.Domain
 	memUsage       uint64
+	netUsage       float64
 	cpuUtilization float64
 	cpuTime        float64
 	cpuAvailable   float64
@@ -34,6 +35,10 @@ func (d Domain) CPU() float64 {
 
 func (d Domain) Memory() uint64 {
 	return d.memUsage
+}
+
+func (d Domain) Network() float64 {
+	return d.netUsage
 }
 
 func (d Domain) Priority() int {
@@ -96,7 +101,13 @@ func UpdateCache(c *cache.Cache) error {
 			cpuUtilization = (domainCpuTime - oldDomain.cpuTime) / (totalAvailable - oldDomain.cpuAvailable)
 		}
 
-		c.Set(name, Domain{domain, info.MaxMem, cpuUtilization, domainCpuTime, totalAvailable}, time.Minute)
+		c.Set(name, Domain{
+			domain:         domain,
+			memUsage:       info.MaxMem,
+			cpuUtilization: cpuUtilization,
+			cpuTime:        domainCpuTime,
+			cpuAvailable:   totalAvailable,
+		}, time.Minute)
 	}
 
 	return nil

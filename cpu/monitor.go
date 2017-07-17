@@ -2,10 +2,10 @@
 package cpu
 
 import (
-	"github.com/0-complexity/ORK/activity"
 	"github.com/op/go-logging"
 	"github.com/patrickmn/go-cache"
 	ps_cpu "github.com/shirou/gopsutil/cpu"
+	"github.com/zero-os/ORK/activity"
 )
 
 const cpuThreshold float64 = 90.0 // cpuThreshold holds the value of the memory threshold

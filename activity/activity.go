@@ -1,14 +1,15 @@
 package activity
 
 import (
-	"github.com/0-complexity/ORK/domain"
 	"github.com/patrickmn/go-cache"
+	"github.com/zero-os/ORK/domain"
 	"sort"
 )
 
 type Activity interface {
 	CPU() float64
 	Memory() uint64
+	Network() float64
 	Kill()
 	Priority() int
 }
@@ -44,6 +45,10 @@ func ActivitiesByMem(ai, aj Activity) bool {
 
 func ActivitiesByCPU(ai, aj Activity) bool {
 	return ai.CPU() > aj.CPU()
+}
+
+func ActivitiesByNetwork(ai, aj Activity) bool {
+	return ai.Network() > aj.Network()
 }
 
 func GetActivities(c *cache.Cache, less Less) []Activity {

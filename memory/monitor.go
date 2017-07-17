@@ -2,10 +2,10 @@
 package memory
 
 import (
-	"github.com/0-complexity/ORK/activity"
 	"github.com/op/go-logging"
 	"github.com/patrickmn/go-cache"
 	"github.com/shirou/gopsutil/mem"
+	"github.com/zero-os/ORK/activity"
 )
 
 // memoryThreshold is the value in MB at which ORK should free-up memory

@@ -5,10 +5,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/0-complexity/ORK/utils"
 	"github.com/op/go-logging"
 	"github.com/patrickmn/go-cache"
 	"github.com/shirou/gopsutil/process"
+	"github.com/zero-os/ORK/utils"
 )
 
 var log = logging.MustGetLogger("ORK")
@@ -25,6 +25,7 @@ type Process struct {
 	process  *process.Process
 	memUsage uint64
 	cpuUsage float64
+	netUsage float64
 }
 
 func (p Process) CPU() float64 {
@@ -33,6 +34,10 @@ func (p Process) CPU() float64 {
 
 func (p Process) Memory() uint64 {
 	return p.memUsage
+}
+
+func (p Process) Network() float64 {
+	return p.netUsage
 }
 
 func (p Process) Priority() int {
@@ -99,7 +104,11 @@ func UpdateCache(c *cache.Cache) error {
 			continue
 		}
 
-		c.Set(key, Process{proc, memory.RSS, percent}, time.Minute)
+		c.Set(key, Process{
+			process:  proc,
+			memUsage: memory.RSS,
+			cpuUsage: percent,
+		}, time.Minute)
 	}
 
 	return nil

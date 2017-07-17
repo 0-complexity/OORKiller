@@ -1,13 +1,15 @@
 package main
 
 import (
-	"github.com/0-complexity/ORK/activity"
-	"github.com/0-complexity/ORK/cpu"
-	"github.com/0-complexity/ORK/domain"
-	"github.com/0-complexity/ORK/memory"
-	"github.com/0-complexity/ORK/process"
 	"github.com/op/go-logging"
 	"github.com/patrickmn/go-cache"
+	"github.com/zero-os/ORK/activity"
+	"github.com/zero-os/ORK/cpu"
+	"github.com/zero-os/ORK/domain"
+	"github.com/zero-os/ORK/memory"
+	"github.com/zero-os/ORK/network"
+	"github.com/zero-os/ORK/nic"
+	"github.com/zero-os/ORK/process"
 	"time"
 )
 
@@ -31,6 +33,15 @@ func monitorCPU(c *cache.Cache) error {
 	}
 }
 
+func monitorNetwork(c *cache.Cache) error {
+	for {
+		if err := network.Monitor(c); err != nil {
+			log.Error(err)
+		}
+		time.Sleep(time.Second)
+	}
+}
+
 func updateCache(c *cache.Cache) error {
 	for {
 
@@ -42,6 +53,9 @@ func updateCache(c *cache.Cache) error {
 			log.Error(err)
 		}
 
+		if err := nic.UpdateCache(c); err != nil {
+			log.Error(err)
+		}
 		time.Sleep(time.Second)
 	}
 }
@@ -53,6 +67,8 @@ func main() {
 	go updateCache(c)
 	go monitorMemory(c)
 	go monitorCPU(c)
+	go monitorNetwork(c)
+
 	//wait
 	select {}
 }
