@@ -19,7 +19,7 @@ type DomainCPUMap map[string]uint64
 type Domain struct {
 	domain         libvirt.Domain
 	memUsage       uint64
-	netUsage       float64
+	netUsage       utils.NetworkUsage
 	cpuUtilization float64
 	cpuTime        float64
 	cpuAvailable   float64
@@ -37,7 +37,7 @@ func (d Domain) Memory() uint64 {
 	return d.memUsage
 }
 
-func (d Domain) Network() float64 {
+func (d Domain) Network() utils.NetworkUsage {
 	return d.netUsage
 }
 

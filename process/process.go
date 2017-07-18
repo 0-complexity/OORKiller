@@ -25,7 +25,7 @@ type Process struct {
 	process  *process.Process
 	memUsage uint64
 	cpuUsage float64
-	netUsage float64
+	netUsage utils.NetworkUsage
 }
 
 func (p Process) CPU() float64 {
@@ -36,7 +36,7 @@ func (p Process) Memory() uint64 {
 	return p.memUsage
 }
 
-func (p Process) Network() float64 {
+func (p Process) Network() utils.NetworkUsage {
 	return p.netUsage
 }
 

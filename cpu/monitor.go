@@ -42,7 +42,7 @@ func Monitor(c *cache.Cache) error {
 		return nil
 	}
 
-	activities := activity.GetActivities(c, activity.ActivitiesByCPU)
+	activities := activity.GetActivitiesSorted(c, activity.ActivitiesByCPU)
 
 	for i := 0; i < len(activities) && cpuOk == false; i++ {
 		activ := activities[i]

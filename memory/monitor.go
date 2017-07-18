@@ -44,7 +44,7 @@ func Monitor(c *cache.Cache) error {
 		return nil
 	}
 
-	activities := activity.GetActivities(c, activity.ActivitiesByMem)
+	activities := activity.GetActivitiesSorted(c, activity.ActivitiesByMem)
 
 	for i := 0; i < len(activities) && memOk == false; i++ {
 		activ := activities[i]
