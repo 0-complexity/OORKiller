@@ -1,16 +1,16 @@
 package main
 
 import (
+	"github.com/zero-os/0-ork/activity"
+	"github.com/zero-os/0-ork/cpu"
+	"github.com/zero-os/0-ork/domain"
+	"github.com/zero-os/0-ork/memory"
+	"github.com/zero-os/0-ork/network"
+	"github.com/zero-os/0-ork/process"
 	"github.com/op/go-logging"
 	"github.com/patrickmn/go-cache"
-	"github.com/zero-os/ORK/activity"
-	"github.com/zero-os/ORK/cpu"
-	"github.com/zero-os/ORK/domain"
-	"github.com/zero-os/ORK/memory"
-	"github.com/zero-os/ORK/network"
-	"github.com/zero-os/ORK/nic"
-	"github.com/zero-os/ORK/process"
 	"time"
+	"github.com/zero-os/0-ork/nic"
 )
 
 var log = logging.MustGetLogger("ORK")

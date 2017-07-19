@@ -3,11 +3,11 @@ package domain
 import (
 	"time"
 
+	"github.com/zero-os/0-ork/utils"
 	"github.com/libvirt/libvirt-go"
 	"github.com/op/go-logging"
 	"github.com/patrickmn/go-cache"
 	"github.com/shirou/gopsutil/cpu"
-	"github.com/zero-os/ORK/utils"
 )
 
 const connectionURI string = "qemu:///system"

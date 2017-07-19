@@ -3,7 +3,7 @@ package nic
 import (
 	"time"
 
-	"github.com/zero-os/ORK/utils"
+	"github.com/zero-os/0-ork/utils"
 
 	"fmt"
 	"io/ioutil"

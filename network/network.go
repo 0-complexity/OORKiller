@@ -3,7 +3,7 @@ package network
 import (
 	"github.com/op/go-logging"
 	"github.com/patrickmn/go-cache"
-	"github.com/zero-os/ORK/activity"
+	"github.com/zero-os/0-ork/activity"
 )
 
 var log = logging.MustGetLogger("ORK")

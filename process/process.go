@@ -5,10 +5,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/zero-os/0-ork/utils"
 	"github.com/op/go-logging"
 	"github.com/patrickmn/go-cache"
 	"github.com/shirou/gopsutil/process"
-	"github.com/zero-os/ORK/utils"
 )
 
 var log = logging.MustGetLogger("ORK")
