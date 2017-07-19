@@ -32,7 +32,7 @@ func isCPUOk() (bool, error) {
 // Monitor checks the cpu consumption and if it exceeds  cpuThreshold it kills
 // activities until the consumption is bellow the threshold.
 func Monitor(c *cache.Cache) error {
-	log.Info("Monitoring CPU")
+	log.Debug("Monitoring CPU")
 
 	cpuOk, err := isCPUOk()
 	if err != nil {

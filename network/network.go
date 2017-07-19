@@ -13,7 +13,7 @@ const networkThreshold float64 = 70.0
 // Monitor checks the network consumption per interface and if the rate is higher than the threshold, it shutsdown the
 // interface exceeding the networkThreshhold
 func Monitor(c *cache.Cache) error {
-	log.Info("Monitoring network")
+	log.Debug("Monitoring network")
 
 	activities := activity.GetActivities(c)
 

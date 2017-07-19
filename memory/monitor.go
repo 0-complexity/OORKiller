@@ -34,7 +34,7 @@ func isMemoryOk() (bool, error) {
 // Monitor checks the memory consumption and if the available memory is below memoryThreshold it kills
 // activities until available memory is more than
 func Monitor(c *cache.Cache) error {
-	log.Info("Monitoring memory")
+	log.Debug("Monitoring memory")
 
 	memOk, err := isMemoryOk()
 	if err != nil {
