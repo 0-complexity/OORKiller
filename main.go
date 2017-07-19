@@ -1,11 +1,11 @@
 package main
 
 import (
-	"github.com/0-complexity/ORK/activity"
-	"github.com/0-complexity/ORK/cpu"
-	"github.com/0-complexity/ORK/domain"
-	"github.com/0-complexity/ORK/memory"
-	"github.com/0-complexity/ORK/process"
+	"github.com/zero-os/0-ork/activity"
+	"github.com/zero-os/0-ork/cpu"
+	"github.com/zero-os/0-ork/domain"
+	"github.com/zero-os/0-ork/memory"
+	"github.com/zero-os/0-ork/process"
 	"github.com/op/go-logging"
 	"github.com/patrickmn/go-cache"
 	"time"

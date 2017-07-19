@@ -3,7 +3,7 @@ package domain
 import (
 	"time"
 
-	"github.com/0-complexity/ORK/utils"
+	"github.com/zero-os/0-ork/utils"
 	"github.com/libvirt/libvirt-go"
 	"github.com/op/go-logging"
 	"github.com/patrickmn/go-cache"

@@ -2,7 +2,7 @@
 package cpu
 
 import (
-	"github.com/0-complexity/ORK/activity"
+	"github.com/zero-os/0-ork/activity"
 	"github.com/op/go-logging"
 	"github.com/patrickmn/go-cache"
 	ps_cpu "github.com/shirou/gopsutil/cpu"

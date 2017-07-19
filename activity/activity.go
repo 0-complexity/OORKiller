@@ -1,7 +1,7 @@
 package activity
 
 import (
-	"github.com/0-complexity/ORK/domain"
+	"github.com/zero-os/0-ork/domain"
 	"github.com/patrickmn/go-cache"
 	"sort"
 )
