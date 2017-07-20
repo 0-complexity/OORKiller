@@ -40,22 +40,22 @@ type rate struct {
 }
 
 var rates = map[int]rate{
-	1:  { 0, 0},
-	2:  {1.25e+8, 0}, // bw: 1000mbit
-	3:  {6.25e+7, 0}, // bw: 500mbit
-	4:  {2.5e+7, 0}, // bw: 200mbit
-	5:  {1.25e+7, 0}, // bw: 100mbit
-	6:  {6.25e+6, 0}, // bw: 50mbit
-	7:  {1.25e+6, 10}, // bw: 10mbit
-	8:  {250000, 20}, // bw: 2mbit
-	9:  {125000, 50}, // bw: 1mbit
-	10: {62500, 100}, // bw: 500kbit
-	11: {25000, 200}, // bw: 200kbit
+	1:  {0, 0},
+	2:  {1.25e+8, 0},     // bw: 1000mbit
+	3:  {6.25e+7, 0},     // bw: 500mbit
+	4:  {2.5e+7, 0},      // bw: 200mbit
+	5:  {1.25e+7, 0},     // bw: 100mbit
+	6:  {6.25e+6, 0},     // bw: 50mbit
+	7:  {1.25e+6, 10000}, // bw: 10mbit, delay: 10ms
+	8:  {250000, 20000},  // bw: 2mbit, delay: 20ms
+	9:  {125000, 50000},  // bw: 1mbit, delay: 50ms
+	10: {62500, 100000},  // bw: 500kbit, delay: 100ms
+	11: {25000, 200},     // bw: 200kbit, delay: 200ms
 }
 
 // Delta is a small closure over the counters, returning the delta against previous
 // first = initial value
-func Delta(first uint64) func(uint64) uint64 {
+func delta(first uint64) func(uint64) uint64 {
 	keep := first
 	return func(delta uint64) uint64 {
 		v := delta - keep
@@ -94,16 +94,15 @@ func (n Nic) setDown() {
 	link, err := netlink.LinkByName(n.name)
 	if err != nil {
 		utils.LogToKernel("ORK: error getting link for interface with name %v\n", n.name)
-		log.Errorf("Error getting link for %v", n.name)
+		log.Errorf("ORK: error getting link for %v: %v", n.name, err)
 		return
 	}
 
-	utils.LogToKernel("ORK: attempting to set down interface with name %v\n", n.name)
 	err = netlink.LinkSetDown(link)
 
 	if err != nil {
 		utils.LogToKernel("ORK: error setting down interface with name %v\n", n.name)
-		log.Errorf("Error setting down interface with name %v: %v", n.name, err)
+		log.Errorf("ORK: error setting down interface with name %v: %v", n.name, err)
 		return
 	}
 	utils.LogToKernel("ORK: successfully set down interface with name %v\n", n.name)
@@ -111,97 +110,81 @@ func (n Nic) setDown() {
 	return
 }
 
-func qdiscs(link netlink.Link) (map[string]netlink.Qdisc, error) {
-	qdiscList, err:= netlink.QdiscList(link)
-	if err != nil {
-		utils.LogToKernel("ORK: error getting qdisc list for interface with name %v\n", link.Attrs().Name)
-		log.Errorf("Error getting qdisc list for interface with name %v\n", link.Attrs().Name)
-		return nil, err
-	}
-	qdiscMap :=make(map[string]netlink.Qdisc)
-	for _, qdisc := range qdiscList {
-		qdiscMap[qdisc.Type()] = qdisc
-	}
-	return qdiscMap, err
-}
-
-func(n Nic) applyTbf(link netlink.Link) {
-	qdiscs, err := qdiscs(link)
-	if err != nil {
-		return
-	}
+func (n Nic) applyTbf(link netlink.Link, parent uint32) (uint32, error) {
+	//squeezing: tc qdisc add dev $NIC parent 1:1 handle 10: tbf rate 1mbit buffer 1600 limit 3000
 	qdiskAttrs := netlink.QdiscAttrs{
 		LinkIndex: link.Attrs().Index,
-		Parent: netlink.HANDLE_ROOT,
+		Parent:    parent,
 	}
 	qdisc := netlink.Tbf{
 		QdiscAttrs: qdiskAttrs,
-		Rate: rates[n.rate].bw,
-		Buffer: tbfBuffer,
-		Limit: tbfLimit,
-
+		Rate:       rates[n.rate].bw,
+		Buffer:     tbfBuffer,
+		Limit:      tbfLimit,
 	}
 
-	_, ok := qdiscs["tbf"]
-	// If the qdisc doesn't exist, create it
-	if !ok {
-		err := netlink.QdiscAdd(&qdisc)
-		if err != nil {
-			utils.LogToKernel("ORK: error adding tbf qdisc for interface with name %v\n", n.name)
-			log.Errorf("Error adding tbf qdisc for interface with name %v\n", n.name)
-		}
-		return
-	}
-
-	// If the qdisc exists, change it
-	err = netlink.QdiscChange(&qdisc)
+	err := netlink.QdiscAdd(&qdisc)
 	if err != nil {
-		utils.LogToKernel("ORK: error changing tbf qdisc for interface with name %v\n", n.name)
-		log.Errorf("Error changing tbf qdisc for interface with name %v\n", n.name)
+		utils.LogToKernel("ORK: error adding tbf qdisc for interface with name %v\n", n.name)
+		log.Errorf("ORK: error adding tbf qdisc for interface with name %v: %v", n.name, err)
+		return 0, err
 	}
-	return
+	qdiscList, err := netlink.QdiscList(link)
+	if err != nil {
+		utils.LogToKernel("ORK: error getting qdisc list for interface with name %v\n", link.Attrs().Name)
+		log.Errorf("ORK: error getting qdisc list for interface with name %v: %v", link.Attrs().Name, err)
+		return 0, err
+	}
+
+	for _, qdisc := range qdiscList {
+		if qdisc.Type() == "tbf" && qdisc.Attrs().Parent == parent {
+			return qdisc.Attrs().Handle, nil
+		}
+	}
+
+	err = fmt.Errorf("ORK: error adding tbf qdisc to interface %v", n.name)
+	log.Error(err)
+	return 0, err
 }
 
-func(n Nic) applyNetem(link netlink.Link) {
-	qdiscs, err := qdiscs(link)
-	if err != nil {
-		return
-	}
-	qdiskAttrs := netlink.QdiscAttrs{
+func (n Nic) applyNetem(link netlink.Link, parent uint32) (uint32, error) {
+	//latency: tc qdisc add dev $NIC root handle 1:0 netem delay 200ms
+	qdiscAttrs := netlink.QdiscAttrs{
 		LinkIndex: link.Attrs().Index,
-		Parent: qdiscs["tbf"].Attrs().Handle,
+		Parent:    parent,
 	}
-	qdisc := netlink.Netem{
-		QdiscAttrs: qdiskAttrs,
+	netemAttrs := netlink.NetemQdiscAttrs{
 		Latency: rates[n.rate].delay,
 	}
+	qdisc := netlink.NewNetem(qdiscAttrs, netemAttrs)
 
-	_, ok := qdiscs["netem"]
-	// If the qdisc doesn't exist, create it
-	if !ok {
-		err := netlink.QdiscAdd(&qdisc)
-		if err != nil {
-			utils.LogToKernel("ORK: error adding netem qdisc for interface with name %v\n", n.name)
-			log.Errorf("Error adding netem qdisc for interface with name %v\n", n.name)
-		}
-		return
-	}
-
-	// If the qdisc exists, change it
-	err = netlink.QdiscChange(&qdisc)
+	err := netlink.QdiscAdd(qdisc)
 	if err != nil {
-		utils.LogToKernel("ORK: error changing netem qdisc for interface with name %v\n", n.name)
-		log.Errorf("Error changing netem qdisc for interface with name %v\n", n.name)
+		utils.LogToKernel("ORK: error adding netem qdisc for interface with name %v\n", n.name)
+		log.Errorf("ORK: error adding netem qdisc for interface with name %v: %v", n.name, err)
+		return 0, err
 	}
-	return
+
+	qdiscList, err := netlink.QdiscList(link)
+	if err != nil {
+		utils.LogToKernel("ORK: error getting qdisc list for interface with name %v\n", link.Attrs().Name)
+		log.Errorf("ORK: error getting qdisc list for interface with name %v: %v", link.Attrs().Name, err)
+		return 0, err
+	}
+	for _, qdisc := range qdiscList {
+		if qdisc.Type() == "netem" && qdisc.Attrs().Parent == parent {
+			return qdisc.Attrs().Handle, nil
+		}
+	}
+	err = fmt.Errorf("ORK: error adding netem qdisc to interface %v", n.name)
+	log.Error(err)
+
+	return 0, err
 }
 
 func (n Nic) squeeze() {
-	//latency: tc qdisc add dev $NIC root handle 1:0 netem delay 200ms
-	//squeezing: tc qdisc add dev $NIC parent 1:1 handle 10: tbf rate 1mbit buffer 1600 limit 3000
-
-	n.rate = n.rate + 1
-	_, ok := rates[n.rate]
+	n.rate++
+	newRate, ok := rates[n.rate]
 	// Nic reached maximum rate and needs to be setdown
 	if !ok {
 		n.setDown()
@@ -211,19 +194,46 @@ func (n Nic) squeeze() {
 	link, err := netlink.LinkByName(n.name)
 	if err != nil {
 		utils.LogToKernel("ORK: error getting link for interface with name %v\n", n.name)
-		log.Errorf("Error getting link for %v", n.name)
+		log.Errorf("ORK: error getting link for %v: %v", n.name, err)
 		return
 	}
 
-	n.applyTbf(link)
-	n.applyNetem(link)
+	qdiscs, err := netlink.QdiscList(link)
+	if err != nil {
+		utils.LogToKernel("ORK: error getting qdisc list for interface with name %v\n", link.Attrs().Name)
+		log.Errorf("ORK: error getting qdisc list for interface with name %v: %v", link.Attrs().Name, err)
+		return
+	}
+
+	for _, qdisc := range qdiscs {
+		if qdisc.Type() != "noqueue" && qdisc.Attrs().Parent == netlink.HANDLE_ROOT {
+			err := netlink.QdiscDel(qdisc)
+			if err != nil {
+				utils.LogToKernel("ORK: error deleting qdisc %v\n", qdisc)
+				log.Errorf("ORK: error deleting qdisc for %v: %v", qdisc, err)
+				return
+			}
+		}
+
+	}
+	parent := uint32(netlink.HANDLE_ROOT)
+
+	if newRate.bw > 0 {
+		tbfHandle, err := n.applyTbf(link, parent)
+		if err == nil {
+			parent = tbfHandle
+		}
+	}
+	if newRate.delay > 0 {
+		n.applyNetem(link, parent)
+	}
 
 	return
 }
 
 // Kill sets down the nic if it exceeded the network threshold otherwise squeeses it.
 func (n Nic) Kill() {
-	if  n.netUsage.Txb >= threshold ||
+	if n.netUsage.Txb >= threshold ||
 		n.netUsage.Txp >= threshold {
 		n.setDown()
 		return
@@ -247,10 +257,10 @@ func UpdateCache(c *cache.Cache) error {
 		if !ok {
 			var nic Nic
 			nic.name = iface
-			nic.rates.rxb = Delta(stats.rxb)
-			nic.rates.txb = Delta(stats.txb)
-			nic.rates.rxp = Delta(stats.rxp)
-			nic.rates.txp = Delta(stats.txp)
+			nic.rates.rxb = delta(stats.rxb)
+			nic.rates.txb = delta(stats.txb)
+			nic.rates.rxp = delta(stats.rxp)
+			nic.rates.txp = delta(stats.txp)
 			nic.ewma.rxb = ewma.NewMovingAverage()
 			nic.ewma.txb = ewma.NewMovingAverage()
 			nic.ewma.rxp = ewma.NewMovingAverage()
@@ -286,7 +296,7 @@ func listNics() ([]string, error) {
 	var ifaces []string
 	l, err := ioutil.ReadDir("/sys/class/net")
 	if err != nil {
-		log.Error("Error reading dir /sys/class/net:", err)
+		log.Error("ORK: error reading dir /sys/class/net:", err)
 		return nil, err
 	}
 	for _, iface := range l {
