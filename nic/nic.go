@@ -292,7 +292,15 @@ func listNics() ([]string, error) {
 		return nil, err
 	}
 	for _, iface := range l {
-		ifaces = append(ifaces, iface.Name())
+		link, err := netlink.LinkByName(iface.Name())
+		if err != nil {
+			utils.LogToKernel("ORK: error getting link for interface with name %v\n", iface.Name())
+			log.Errorf("ORK: error getting link for %v: %v", iface.Name(), err)
+			return nil, err
+		}
+		if link.Type() == "vxlan" {
+			ifaces = append(ifaces, iface.Name())
+		}
 	}
 	return ifaces, nil
 }
