@@ -64,6 +64,24 @@ func delta(first uint64) func(uint64) uint64 {
 	}
 }
 
+func getQdiscHandle(link netlink.Link, qdiscType string, parent uint32) (uint32, error) {
+	qdiscList, err := netlink.QdiscList(link)
+	if err != nil {
+		utils.LogToKernel("ORK: error getting qdisc list for interface with name %v\n", link.Attrs().Name)
+		log.Errorf("ORK: error getting qdisc list for interface with name %v: %v", link.Attrs().Name, err)
+		return 0, err
+	}
+
+	for _, qdisc := range qdiscList {
+		if qdisc.Type() == qdiscType && qdisc.Attrs().Parent == parent {
+			return qdisc.Attrs().Handle, nil
+		}
+	}
+	err = fmt.Errorf("ORK: failed to find qdisk %v with parent %v", qdiscType, parent)
+	log.Error(err)
+	return 0, err
+}
+
 type Nic struct {
 	name     string
 	memUsage uint64
@@ -110,7 +128,7 @@ func (n Nic) setDown() {
 	return
 }
 
-func (n Nic) applyTbf(link netlink.Link, parent uint32) (uint32, error) {
+func (n Nic) applyTbf(link netlink.Link, parent uint32) error {
 	//squeezing: tc qdisc add dev $NIC parent 1:1 handle 10: tbf rate 1mbit buffer 1600 limit 3000
 	qdiskAttrs := netlink.QdiscAttrs{
 		LinkIndex: link.Attrs().Index,
@@ -127,27 +145,12 @@ func (n Nic) applyTbf(link netlink.Link, parent uint32) (uint32, error) {
 	if err != nil {
 		utils.LogToKernel("ORK: error adding tbf qdisc for interface with name %v\n", n.name)
 		log.Errorf("ORK: error adding tbf qdisc for interface with name %v: %v", n.name, err)
-		return 0, err
+		return err
 	}
-	qdiscList, err := netlink.QdiscList(link)
-	if err != nil {
-		utils.LogToKernel("ORK: error getting qdisc list for interface with name %v\n", link.Attrs().Name)
-		log.Errorf("ORK: error getting qdisc list for interface with name %v: %v", link.Attrs().Name, err)
-		return 0, err
-	}
-
-	for _, qdisc := range qdiscList {
-		if qdisc.Type() == "tbf" && qdisc.Attrs().Parent == parent {
-			return qdisc.Attrs().Handle, nil
-		}
-	}
-
-	err = fmt.Errorf("ORK: error adding tbf qdisc to interface %v", n.name)
-	log.Error(err)
-	return 0, err
+	return nil
 }
 
-func (n Nic) applyNetem(link netlink.Link, parent uint32) (uint32, error) {
+func (n Nic) applyNetem(link netlink.Link, parent uint32) error {
 	//latency: tc qdisc add dev $NIC root handle 1:0 netem delay 200ms
 	qdiscAttrs := netlink.QdiscAttrs{
 		LinkIndex: link.Attrs().Index,
@@ -162,24 +165,10 @@ func (n Nic) applyNetem(link netlink.Link, parent uint32) (uint32, error) {
 	if err != nil {
 		utils.LogToKernel("ORK: error adding netem qdisc for interface with name %v\n", n.name)
 		log.Errorf("ORK: error adding netem qdisc for interface with name %v: %v", n.name, err)
-		return 0, err
+		return err
 	}
 
-	qdiscList, err := netlink.QdiscList(link)
-	if err != nil {
-		utils.LogToKernel("ORK: error getting qdisc list for interface with name %v\n", link.Attrs().Name)
-		log.Errorf("ORK: error getting qdisc list for interface with name %v: %v", link.Attrs().Name, err)
-		return 0, err
-	}
-	for _, qdisc := range qdiscList {
-		if qdisc.Type() == "netem" && qdisc.Attrs().Parent == parent {
-			return qdisc.Attrs().Handle, nil
-		}
-	}
-	err = fmt.Errorf("ORK: error adding netem qdisc to interface %v", n.name)
-	log.Error(err)
-
-	return 0, err
+	return nil
 }
 
 func (n Nic) squeeze() {
@@ -219,9 +208,12 @@ func (n Nic) squeeze() {
 	parent := uint32(netlink.HANDLE_ROOT)
 
 	if newRate.bw > 0 {
-		tbfHandle, err := n.applyTbf(link, parent)
+		err := n.applyTbf(link, parent)
 		if err == nil {
-			parent = tbfHandle
+			handle, err := getQdiscHandle(link, "tbf", parent)
+			if err == nil {
+				parent = handle
+			}
 		}
 	}
 	if newRate.delay > 0 {
