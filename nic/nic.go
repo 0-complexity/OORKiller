@@ -264,10 +264,10 @@ func UpdateCache(c *cache.Cache) error {
 			nic.ewma.txb = ewma.NewMovingAverage()
 			nic.ewma.rxp = ewma.NewMovingAverage()
 			nic.ewma.txp = ewma.NewMovingAverage()
-			nic.netUsage.Rxb = nic.ewma.rxb.Value() / float64(stats.rxb)
-			nic.netUsage.Txb = nic.ewma.txb.Value() / float64(stats.txb)
-			nic.netUsage.Rxp = nic.ewma.rxp.Value() / float64(stats.rxp)
-			nic.netUsage.Txp = nic.ewma.txp.Value() / float64(stats.txp)
+			nic.netUsage.Rxb = (nic.ewma.rxb.Value() / float64(stats.rxb)) * 100
+			nic.netUsage.Txb = (nic.ewma.txb.Value() / float64(stats.txb)) * 100
+			nic.netUsage.Rxp = (nic.ewma.rxp.Value() / float64(stats.rxp)) * 100
+			nic.netUsage.Txp = (nic.ewma.txp.Value() / float64(stats.txp)) * 100
 			nic.rate = 1
 
 			c.Set(iface, nic, time.Minute)
@@ -280,10 +280,10 @@ func UpdateCache(c *cache.Cache) error {
 		nic.ewma.txb.Add(float64(nic.rates.txb(stats.txb)))
 		nic.ewma.rxp.Add(float64(nic.rates.rxp(stats.rxp)))
 		nic.ewma.txp.Add(float64(nic.rates.txp(stats.txp)))
-		nic.netUsage.Rxb = nic.ewma.rxb.Value() / float64(stats.rxb)
-		nic.netUsage.Txb = nic.ewma.txb.Value() / float64(stats.txb)
-		nic.netUsage.Rxp = nic.ewma.rxp.Value() / float64(stats.rxp)
-		nic.netUsage.Txp = nic.ewma.txp.Value() / float64(stats.txp)
+		nic.netUsage.Rxb = (nic.ewma.rxb.Value() / float64(stats.rxb)) * 100
+		nic.netUsage.Txb = (nic.ewma.txb.Value() / float64(stats.txb)) * 100
+		nic.netUsage.Rxp = (nic.ewma.rxp.Value() / float64(stats.rxp)) * 100
+		nic.netUsage.Txp = (nic.ewma.txp.Value() / float64(stats.txp)) * 100
 
 		c.Set(iface, nic, time.Minute)
 	}
@@ -304,7 +304,7 @@ func listNics() ([]string, error) {
 			log.Errorf("Error getting link for %v: %v", iface.Name(), err)
 			return nil, err
 		}
-		if link.Type() == "vxlan" {
+		if link.Type() == "veth" {
 			ifaces = append(ifaces, iface.Name())
 		}
 	}
