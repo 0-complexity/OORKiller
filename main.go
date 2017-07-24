@@ -76,11 +76,6 @@ func main() {
 		},
 	}
 	app.Action = func(context *cli.Context) {
-		_, ok := levelNames[context.String("level")]
-		if !ok {
-			log.Info("Invalid level")
-			os.Exit(1)
-		}
 		level, err := logging.LogLevel(context.String("level"))
 		if err != nil {
 			log.Error(err)
