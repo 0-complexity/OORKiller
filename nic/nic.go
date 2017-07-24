@@ -67,8 +67,7 @@ func delta(first uint64) func(uint64) uint64 {
 func getQdiscHandle(link netlink.Link, qdiscType string, parent uint32) (uint32, error) {
 	qdiscList, err := netlink.QdiscList(link)
 	if err != nil {
-		utils.LogToKernel("ORK: error getting qdisc list for interface with name %v\n", link.Attrs().Name)
-		log.Errorf("ORK: error getting qdisc list for interface with name %v: %v", link.Attrs().Name, err)
+		log.Errorf("Error getting qdisc list for interface %v: %v", link.Attrs().Name, err)
 		return 0, err
 	}
 
@@ -77,7 +76,7 @@ func getQdiscHandle(link netlink.Link, qdiscType string, parent uint32) (uint32,
 			return qdisc.Attrs().Handle, nil
 		}
 	}
-	err = fmt.Errorf("ORK: failed to find qdisk %v with parent %v", qdiscType, parent)
+	err = fmt.Errorf("Failed to find qdisk %v with parent %v", qdiscType, parent)
 	log.Error(err)
 	return 0, err
 }
@@ -111,20 +110,21 @@ func (n Nic) Priority() int {
 func (n Nic) setDown() {
 	link, err := netlink.LinkByName(n.name)
 	if err != nil {
-		utils.LogToKernel("ORK: error getting link for interface with name %v\n", n.name)
-		log.Errorf("ORK: error getting link for %v: %v", n.name, err)
+		log.Errorf("Error getting link for %v: %v", n.name, err)
 		return
 	}
 
+	utils.LogToKernel("ORK: attempting to setdown link %v\n", n.name)
+	log.Debug("Attempting to setdown link %v", n.name)
 	err = netlink.LinkSetDown(link)
 
 	if err != nil {
-		utils.LogToKernel("ORK: error setting down interface with name %v\n", n.name)
-		log.Errorf("ORK: error setting down interface with name %v: %v", n.name, err)
+		utils.LogToKernel("ORK: error setting down interface %v\n", n.name)
+		log.Errorf("Error setting down interface %v: %v", n.name, err)
 		return
 	}
-	utils.LogToKernel("ORK: successfully set down interface with name %v\n", n.name)
-	log.Debug("Successfully set down interface with name %v", n.name)
+	utils.LogToKernel("ORK: successfully set down interface %v\n", n.name)
+	log.Debug("Successfully set down interface %v", n.name)
 	return
 }
 
@@ -141,10 +141,13 @@ func (n Nic) applyTbf(link netlink.Link, parent uint32) error {
 		Limit:      tbfLimit,
 	}
 
+	utils.LogToKernel("ORK: attempting to add tbf qdisc for interface %v\n", n.name)
+	log.Debugf("Attempting to add tbf qdisc for interface %v", n.name)
+
 	err := netlink.QdiscAdd(&qdisc)
 	if err != nil {
-		utils.LogToKernel("ORK: error adding tbf qdisc for interface with name %v\n", n.name)
-		log.Errorf("ORK: error adding tbf qdisc for interface with name %v: %v", n.name, err)
+		utils.LogToKernel("ORK: error adding tbf qdisc for interface %v\n", n.name)
+		log.Errorf("Error adding tbf qdisc for interface %v: %v", n.name, err)
 		return err
 	}
 	return nil
@@ -161,10 +164,13 @@ func (n Nic) applyNetem(link netlink.Link, parent uint32) error {
 	}
 	qdisc := netlink.NewNetem(qdiscAttrs, netemAttrs)
 
+	utils.LogToKernel("ORK: attempting to add netem qdisc for interface %v\n", n.name)
+	log.Debug("Attempting to add netem qdisc for interface %v", n.name)
+
 	err := netlink.QdiscAdd(qdisc)
 	if err != nil {
-		utils.LogToKernel("ORK: error adding netem qdisc for interface with name %v\n", n.name)
-		log.Errorf("ORK: error adding netem qdisc for interface with name %v: %v", n.name, err)
+		utils.LogToKernel("ORK: error adding netem qdisc for interface %v\n", n.name)
+		log.Errorf("Error adding netem qdisc for interface %v: %v", n.name, err)
 		return err
 	}
 
@@ -182,24 +188,25 @@ func (n Nic) squeeze() {
 
 	link, err := netlink.LinkByName(n.name)
 	if err != nil {
-		utils.LogToKernel("ORK: error getting link for interface with name %v\n", n.name)
-		log.Errorf("ORK: error getting link for %v: %v", n.name, err)
+		log.Errorf("Error getting link for %v: %v", n.name, err)
 		return
 	}
 
 	qdiscs, err := netlink.QdiscList(link)
 	if err != nil {
-		utils.LogToKernel("ORK: error getting qdisc list for interface with name %v\n", link.Attrs().Name)
-		log.Errorf("ORK: error getting qdisc list for interface with name %v: %v", link.Attrs().Name, err)
+		log.Errorf("Error getting qdisc list for interface %v: %v", link.Attrs().Name, err)
 		return
 	}
 
 	for _, qdisc := range qdiscs {
 		if qdisc.Type() != "noqueue" && qdisc.Attrs().Parent == netlink.HANDLE_ROOT {
+			utils.LogToKernel("ORK: Attempting to delete qdisc %v\n", qdisc)
+			log.Errorf("Attempting to delete qdisc %v: %v", qdisc, err)
+
 			err := netlink.QdiscDel(qdisc)
 			if err != nil {
 				utils.LogToKernel("ORK: error deleting qdisc %v\n", qdisc)
-				log.Errorf("ORK: error deleting qdisc for %v: %v", qdisc, err)
+				log.Errorf("Error deleting qdisc for %v: %v", qdisc, err)
 				return
 			}
 		}
@@ -288,14 +295,13 @@ func listNics() ([]string, error) {
 	var ifaces []string
 	l, err := ioutil.ReadDir("/sys/class/net")
 	if err != nil {
-		log.Error("ORK: error reading dir /sys/class/net:", err)
+		log.Error("Error reading dir /sys/class/net:", err)
 		return nil, err
 	}
 	for _, iface := range l {
 		link, err := netlink.LinkByName(iface.Name())
 		if err != nil {
-			utils.LogToKernel("ORK: error getting link for interface with name %v\n", iface.Name())
-			log.Errorf("ORK: error getting link for %v: %v", iface.Name(), err)
+			log.Errorf("Error getting link for %v: %v", iface.Name(), err)
 			return nil, err
 		}
 		if link.Type() == "vxlan" {

@@ -5,10 +5,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/zero-os/0-ork/utils"
 	"github.com/op/go-logging"
 	"github.com/patrickmn/go-cache"
 	"github.com/shirou/gopsutil/process"
+	"github.com/zero-os/0-ork/utils"
 )
 
 var log = logging.MustGetLogger("ORK")
@@ -141,7 +141,7 @@ func setupWhiteList(pMap processesMap) (whiteListMap, error) {
 	for _, p := range pMap {
 		processName, err := p.Name()
 		if err != nil {
-			log.Debug("Erorr getting process name")
+			log.Error("Erorr getting process name")
 			return nil, err
 		}
 

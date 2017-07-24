@@ -3,11 +3,11 @@ package domain
 import (
 	"time"
 
-	"github.com/zero-os/0-ork/utils"
 	"github.com/libvirt/libvirt-go"
 	"github.com/op/go-logging"
 	"github.com/patrickmn/go-cache"
 	"github.com/shirou/gopsutil/cpu"
+	"github.com/zero-os/0-ork/utils"
 )
 
 const connectionURI string = "qemu:///system"
@@ -117,14 +117,14 @@ func getDomains() ([]libvirt.Domain, error) {
 	conn, err := libvirt.NewConnect(connectionURI)
 
 	if err != nil {
-		log.Debug("Error connecting to qemu")
+		log.Error("Error connecting to qemu")
 		return nil, err
 	}
 	defer conn.Close()
 
 	domains, err := conn.ListAllDomains(libvirt.CONNECT_LIST_DOMAINS_ACTIVE)
 	if err != nil {
-		log.Debug("Error listing domains")
+		log.Error("Error listing domains")
 		return nil, err
 	}
 

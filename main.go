@@ -1,16 +1,19 @@
 package main
 
 import (
+	"os"
+	"time"
+
+	"github.com/op/go-logging"
+	"github.com/patrickmn/go-cache"
+	"github.com/urfave/cli"
 	"github.com/zero-os/0-ork/activity"
 	"github.com/zero-os/0-ork/cpu"
 	"github.com/zero-os/0-ork/domain"
 	"github.com/zero-os/0-ork/memory"
 	"github.com/zero-os/0-ork/network"
-	"github.com/zero-os/0-ork/process"
-	"github.com/op/go-logging"
-	"github.com/patrickmn/go-cache"
-	"time"
 	"github.com/zero-os/0-ork/nic"
+	"github.com/zero-os/0-ork/process"
 )
 
 var log = logging.MustGetLogger("ORK")
@@ -61,14 +64,44 @@ func updateCache(c *cache.Cache) error {
 }
 
 func main() {
-	c := cache.New(cache.NoExpiration, time.Minute)
-	c.OnEvicted(activity.EvictActivity)
+	app := cli.NewApp()
+	app.Version = "0.1.0"
+	app.Name = "ORK"
 
-	go updateCache(c)
-	go monitorMemory(c)
-	go monitorCPU(c)
-	go monitorNetwork(c)
+	app.Flags = []cli.Flag{
+		cli.StringFlag{
+			Name:  "level",
+			Value: "INFO",
+			Usage: "log level",
+		},
+	}
+	app.Action = func(context *cli.Context) {
+		_, ok := levelNames[context.String("level")]
+		if !ok {
+			log.Info("Invalid level")
+			os.Exit(1)
+		}
+		level, err := logging.LogLevel(context.String("level"))
+		if err != nil {
+			log.Error(err)
+			os.Exit(1)
+		}
+		backend := logging.NewLogBackend(os.Stderr, "", 0)
+		backendLeveled := logging.AddModuleLevel(backend)
+		backendLeveled.SetLevel(level, "")
+		logging.SetBackend(backendLeveled)
 
-	//wait
-	select {}
+		c := cache.New(cache.NoExpiration, time.Minute)
+		c.OnEvicted(activity.EvictActivity)
+
+		go updateCache(c)
+		go monitorMemory(c)
+		go monitorCPU(c)
+		go monitorNetwork(c)
+
+		//wait
+		select {}
+	}
+
+	app.Run(os.Args)
 }

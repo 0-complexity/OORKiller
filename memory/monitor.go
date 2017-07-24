@@ -2,10 +2,10 @@
 package memory
 
 import (
-	"github.com/zero-os/0-ork/activity"
 	"github.com/op/go-logging"
 	"github.com/patrickmn/go-cache"
 	"github.com/shirou/gopsutil/mem"
+	"github.com/zero-os/0-ork/activity"
 )
 
 // memoryThreshold is the value in MB at which ORK should free-up memory
@@ -18,7 +18,7 @@ var log = logging.MustGetLogger("ORK")
 func isMemoryOk() (bool, error) {
 	v, err := mem.VirtualMemory()
 	if err != nil {
-		log.Debug("Error getting available memory")
+		log.Error("Error getting available memory")
 		return false, err
 	}
 

@@ -18,9 +18,7 @@ func Monitor(c *cache.Cache) error {
 	activities := activity.GetActivities(c)
 
 	for _, activ := range activities {
-		if activ.Network().Rxb >= networkThreshold ||
-			activ.Network().Txb >= networkThreshold ||
-			activ.Network().Rxp >= networkThreshold ||
+		if activ.Network().Txb >= networkThreshold ||
 			activ.Network().Txp >= networkThreshold {
 			activ.Kill()
 		}
