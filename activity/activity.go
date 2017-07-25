@@ -1,10 +1,11 @@
 package activity
 
 import (
+	"sort"
+
 	"github.com/patrickmn/go-cache"
 	"github.com/zero-os/0-ork/domain"
 	"github.com/zero-os/0-ork/utils"
-	"sort"
 )
 
 type Activity interface {

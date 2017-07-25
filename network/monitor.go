@@ -8,7 +8,8 @@ import (
 
 var log = logging.MustGetLogger("ORK")
 
-const networkThreshold float64 = 70.0
+const byteThreshold float64 = 175000000.0 // 70% of 2Gbit in bytes
+const packetThreshold float64 = 14000.0 // 70% of 20kpps
 
 // Monitor checks the network consumption per interface and if the rate is higher than the threshold, it shutsdown the
 // interface exceeding the networkThreshhold
@@ -18,8 +19,9 @@ func Monitor(c *cache.Cache) error {
 	activities := activity.GetActivities(c)
 
 	for _, activ := range activities {
-		if activ.Network().Txb >= networkThreshold ||
-			activ.Network().Txp >= networkThreshold {
+		netUsage:= activ.Network()
+		if netUsage.Txb >= byteThreshold ||
+			netUsage.Txp >= packetThreshold {
 			activ.Kill()
 		}
 

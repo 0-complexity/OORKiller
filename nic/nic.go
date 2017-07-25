@@ -16,7 +16,9 @@ import (
 	"github.com/vishvananda/netlink"
 )
 
-const threshold float64 = 90.0
+const byteThreshold float64 = 225000000.0 // 90% of 2Gbit in bytes
+const packetThreshold float64 = 18000.0 // 90% of 20kpps
+
 const tbfBuffer = 1600
 const tbfLimit = 3000
 
@@ -26,12 +28,22 @@ type ifStat struct {
 	rxb, txb, rxp, txp uint64
 }
 
-type ifaceRates struct {
+type ifaceDelta struct {
 	rxb, txb, rxp, txp func(uint64) uint64
 }
 
-type ifaceEWMA struct {
+type ifaceEwma struct {
 	rxb, txb, rxp, txp ewma.MovingAverage
+}
+
+type Nic struct {
+	name     string
+	memUsage uint64
+	cpuUsage float64
+	netUsage utils.NetworkUsage
+	delta    ifaceDelta
+	ewma     ifaceEwma
+	rate     int
 }
 
 type rate struct {
@@ -53,7 +65,7 @@ var rates = map[int]rate{
 	11: {25000, 200},     // bw: 200kbit, delay: 200ms
 }
 
-// Delta is a small closure over the counters, returning the delta against previous
+// delta is a small closure over the counters, returning the delta against previous
 // first = initial value
 func delta(first uint64) func(uint64) uint64 {
 	keep := first
@@ -81,16 +93,6 @@ func getQdiscHandle(link netlink.Link, qdiscType string, parent uint32) (uint32,
 	return 0, err
 }
 
-type Nic struct {
-	name     string
-	memUsage uint64
-	cpuUsage float64
-	rates    ifaceRates
-	ewma     ifaceEWMA
-	netUsage utils.NetworkUsage
-	rate     int
-}
-
 func (n Nic) CPU() float64 {
 	return n.cpuUsage
 }
@@ -114,17 +116,17 @@ func (n Nic) setDown() {
 		return
 	}
 
-	utils.LogToKernel("ORK: attempting to setdown link %v\n", n.name)
-	log.Debug("Attempting to setdown link %v", n.name)
+	utils.LogToKernel("ORK: attempting to shut down interface %v\n", n.name)
+	log.Debugf("Attempting to shut down interface %v", n.name)
 	err = netlink.LinkSetDown(link)
 
 	if err != nil {
-		utils.LogToKernel("ORK: error setting down interface %v\n", n.name)
-		log.Errorf("Error setting down interface %v: %v", n.name, err)
+		utils.LogToKernel("ORK: error shutting down interface %v\n", n.name)
+		log.Errorf("Error shuting down interface %v: %v", n.name, err)
 		return
 	}
-	utils.LogToKernel("ORK: successfully set down interface %v\n", n.name)
-	log.Debug("Successfully set down interface %v", n.name)
+	utils.LogToKernel("ORK: successfully shut down interface %v\n", n.name)
+	log.Debugf("Successfully shut down interface %v", n.name)
 	return
 }
 
@@ -141,13 +143,13 @@ func (n Nic) applyTbf(link netlink.Link, parent uint32) error {
 		Limit:      tbfLimit,
 	}
 
-	utils.LogToKernel("ORK: attempting to add tbf qdisc for interface %v\n", n.name)
-	log.Debugf("Attempting to add tbf qdisc for interface %v", n.name)
+	utils.LogToKernel("ORK: limiting bandwith of interface %v to %v\n", n.name, rates[n.rate].bw)
+	log.Debugf("Limiting bandwith of interface %v to %v", n.name, rates[n.rate].bw)
 
 	err := netlink.QdiscAdd(&qdisc)
 	if err != nil {
-		utils.LogToKernel("ORK: error adding tbf qdisc for interface %v\n", n.name)
-		log.Errorf("Error adding tbf qdisc for interface %v: %v", n.name, err)
+		utils.LogToKernel("ORK: error limiting bandwith of interface %v to %v\n", n.name, rates[n.rate].bw)
+		log.Errorf("Error limiting bandwith of interface %v to %v: %v", n.name, rates[n.rate].bw, err)
 		return err
 	}
 	return nil
@@ -164,13 +166,13 @@ func (n Nic) applyNetem(link netlink.Link, parent uint32) error {
 	}
 	qdisc := netlink.NewNetem(qdiscAttrs, netemAttrs)
 
-	utils.LogToKernel("ORK: attempting to add netem qdisc for interface %v\n", n.name)
-	log.Debug("Attempting to add netem qdisc for interface %v", n.name)
+	utils.LogToKernel("ORK: adding latency %v to interface %v\n", rates[n.rate].delay, n.name)
+	log.Debugf("Adding latency %v to interface %v", rates[n.rate].delay, n.name)
 
 	err := netlink.QdiscAdd(qdisc)
 	if err != nil {
-		utils.LogToKernel("ORK: error adding netem qdisc for interface %v\n", n.name)
-		log.Errorf("Error adding netem qdisc for interface %v: %v", n.name, err)
+		utils.LogToKernel("ORK: error adding latency %v to interface %v\n", rates[n.rate].delay, n.name)
+		log.Errorf("Error adding latency %v to interface %v: %v", rates[n.rate].delay, n.name, err)
 		return err
 	}
 
@@ -201,7 +203,7 @@ func (n Nic) squeeze() {
 	for _, qdisc := range qdiscs {
 		if qdisc.Type() != "noqueue" && qdisc.Attrs().Parent == netlink.HANDLE_ROOT {
 			utils.LogToKernel("ORK: Attempting to delete qdisc %v\n", qdisc)
-			log.Errorf("Attempting to delete qdisc %v: %v", qdisc, err)
+			log.Debugf("Attempting to delete qdisc %v: %v", qdisc, err)
 
 			err := netlink.QdiscDel(qdisc)
 			if err != nil {
@@ -209,6 +211,8 @@ func (n Nic) squeeze() {
 				log.Errorf("Error deleting qdisc for %v: %v", qdisc, err)
 				return
 			}
+			utils.LogToKernel("ORK: successfully deleted qdisc %v\n", qdisc)
+			log.Debugf("Successfully deleted qdisc %v: %v", qdisc, err)
 		}
 
 	}
@@ -232,8 +236,8 @@ func (n Nic) squeeze() {
 
 // Kill sets down the nic if it exceeded the network threshold otherwise squeeses it.
 func (n Nic) Kill() {
-	if n.netUsage.Txb >= threshold ||
-		n.netUsage.Txp >= threshold {
+	if n.netUsage.Txb >= byteThreshold ||
+		n.netUsage.Txp >= packetThreshold {
 		n.setDown()
 		return
 	}
@@ -256,18 +260,18 @@ func UpdateCache(c *cache.Cache) error {
 		if !ok {
 			var nic Nic
 			nic.name = iface
-			nic.rates.rxb = delta(stats.rxb)
-			nic.rates.txb = delta(stats.txb)
-			nic.rates.rxp = delta(stats.rxp)
-			nic.rates.txp = delta(stats.txp)
-			nic.ewma.rxb = ewma.NewMovingAverage()
-			nic.ewma.txb = ewma.NewMovingAverage()
-			nic.ewma.rxp = ewma.NewMovingAverage()
-			nic.ewma.txp = ewma.NewMovingAverage()
-			nic.netUsage.Rxb = (nic.ewma.rxb.Value() / float64(stats.rxb)) * 100
-			nic.netUsage.Txb = (nic.ewma.txb.Value() / float64(stats.txb)) * 100
-			nic.netUsage.Rxp = (nic.ewma.rxp.Value() / float64(stats.rxp)) * 100
-			nic.netUsage.Txp = (nic.ewma.txp.Value() / float64(stats.txp)) * 100
+			nic.delta.rxb = delta(stats.rxb)
+			nic.delta.txb = delta(stats.txb)
+			nic.delta.rxp = delta(stats.rxp)
+			nic.delta.txp = delta(stats.txp)
+			nic.ewma.rxb = ewma.NewMovingAverage(60)
+			nic.ewma.txb = ewma.NewMovingAverage(60)
+			nic.ewma.rxp = ewma.NewMovingAverage(60)
+			nic.ewma.txp = ewma.NewMovingAverage(60)
+			nic.netUsage.Rxb = nic.ewma.rxb.Value()
+			nic.netUsage.Txb = nic.ewma.txb.Value()
+			nic.netUsage.Rxp = nic.ewma.rxp.Value()
+			nic.netUsage.Txp = nic.ewma.txp.Value()
 			nic.rate = 1
 
 			c.Set(iface, nic, time.Minute)
@@ -276,14 +280,14 @@ func UpdateCache(c *cache.Cache) error {
 
 		// If the nic exists in the cache, add the new statistics to emwa and calculate the new usage percentage.
 		nic := n.(Nic)
-		nic.ewma.rxb.Add(float64(nic.rates.rxb(stats.rxb)))
-		nic.ewma.txb.Add(float64(nic.rates.txb(stats.txb)))
-		nic.ewma.rxp.Add(float64(nic.rates.rxp(stats.rxp)))
-		nic.ewma.txp.Add(float64(nic.rates.txp(stats.txp)))
-		nic.netUsage.Rxb = (nic.ewma.rxb.Value() / float64(stats.rxb)) * 100
-		nic.netUsage.Txb = (nic.ewma.txb.Value() / float64(stats.txb)) * 100
-		nic.netUsage.Rxp = (nic.ewma.rxp.Value() / float64(stats.rxp)) * 100
-		nic.netUsage.Txp = (nic.ewma.txp.Value() / float64(stats.txp)) * 100
+		nic.ewma.rxb.Add(float64(nic.delta.rxb(stats.rxb)))
+		nic.ewma.txb.Add(float64(nic.delta.txb(stats.txb)))
+		nic.ewma.rxp.Add(float64(nic.delta.rxp(stats.rxp)))
+		nic.ewma.txp.Add(float64(nic.delta.txp(stats.txp)))
+		nic.netUsage.Rxb = nic.ewma.rxb.Value()
+		nic.netUsage.Txb = nic.ewma.txb.Value()
+		nic.netUsage.Rxp = nic.ewma.rxp.Value()
+		nic.netUsage.Txp = nic.ewma.txp.Value()
 
 		c.Set(iface, nic, time.Minute)
 	}
@@ -295,7 +299,7 @@ func listNics() ([]string, error) {
 	var ifaces []string
 	l, err := ioutil.ReadDir("/sys/class/net")
 	if err != nil {
-		log.Error("Error reading dir /sys/class/net:", err)
+		log.Errorf("Error reading dir /sys/class/net: %v", err)
 		return nil, err
 	}
 	for _, iface := range l {
