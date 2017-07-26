@@ -89,6 +89,7 @@ func main() {
 		c := cache.New(cache.NoExpiration, time.Minute)
 		c.OnEvicted(activity.EvictActivity)
 
+		log.Info("Starting ORK....")
 		go updateCache(c)
 		go monitorMemory(c)
 		go monitorCPU(c)

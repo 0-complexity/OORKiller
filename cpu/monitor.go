@@ -8,7 +8,7 @@ import (
 	"github.com/zero-os/0-ork/activity"
 )
 
-const cpuThreshold float64 = 90.0 // cpuThreshold holds the value of the memory threshold
+const cpuThreshold float64 = 90.0 // cpuThreshold holds the percentage of cpu consumption at which ork should kill activities
 var log = logging.MustGetLogger("ORK")
 
 // isCPUOk returns a true if the CPU consumption is below the defined threshold
