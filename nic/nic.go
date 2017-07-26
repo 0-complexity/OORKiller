@@ -17,7 +17,7 @@ import (
 )
 
 const byteThreshold float64 = 225000000.0 // 90% of 2Gbit in bytes
-const packetThreshold float64 = 18000.0 // 90% of 20kpps
+const packetThreshold float64 = 18000.0   // 90% of 20kpps
 
 const tbfBuffer = 1600
 const tbfLimit = 3000
@@ -52,7 +52,7 @@ type rate struct {
 }
 
 var rates = map[int]rate{
-	1:  {0, 0},
+	1:  {2.5e+8, 0},      // bw: 2gbit
 	2:  {1.25e+8, 0},     // bw: 1000mbit
 	3:  {6.25e+7, 0},     // bw: 500mbit
 	4:  {2.5e+7, 0},      // bw: 200mbit
@@ -264,10 +264,10 @@ func UpdateCache(c *cache.Cache) error {
 			nic.delta.txb = delta(stats.txb)
 			nic.delta.rxp = delta(stats.rxp)
 			nic.delta.txp = delta(stats.txp)
-			nic.ewma.rxb = ewma.NewMovingAverage(60)
-			nic.ewma.txb = ewma.NewMovingAverage(60)
-			nic.ewma.rxp = ewma.NewMovingAverage(60)
-			nic.ewma.txp = ewma.NewMovingAverage(60)
+			nic.ewma.rxb = ewma.NewMovingAverage(180)
+			nic.ewma.txb = ewma.NewMovingAverage(180)
+			nic.ewma.rxp = ewma.NewMovingAverage(180)
+			nic.ewma.txp = ewma.NewMovingAverage(180)
 			nic.netUsage.Rxb = nic.ewma.rxb.Value()
 			nic.netUsage.Txb = nic.ewma.txb.Value()
 			nic.netUsage.Rxp = nic.ewma.rxp.Value()
