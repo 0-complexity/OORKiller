@@ -17,7 +17,7 @@ import (
 )
 
 const byteThreshold float64 = 225000000.0 // 90% of 2Gbit in bytes
-const packetThreshold float64 = 18000.0   // 90% of 20kpps
+const packetThreshold float64 = 36000.0   // 90% of 40kpps
 
 const tbfBuffer = 1600
 const tbfLimit = 3000
