@@ -322,7 +322,11 @@ func readVal(path string) (uint64, error) {
 		return 0, err
 	}
 	val := strings.Split(string(contents), "\n")
-	digit, _ := strconv.ParseUint(val[0], 10, 64)
+	digit, err := strconv.ParseUint(val[0], 10, 64)
+	if err != nil {
+		log.Errorf("Error parsing int %v", err)
+		return 0, err
+	}
 	return digit, nil
 }
 
