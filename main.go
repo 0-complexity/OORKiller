@@ -81,7 +81,7 @@ func main() {
 			log.Error(err)
 			os.Exit(1)
 		}
-		backend := logging.NewLogBackend(os.Stderr, "", 0)
+		backend := logging.NewLogBackend(os.Stdout, "", 0)
 		backendLeveled := logging.AddModuleLevel(backend)
 		backendLeveled.SetLevel(level, "")
 		logging.SetBackend(backendLeveled)
