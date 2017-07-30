@@ -1,11 +1,11 @@
 package utils
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/op/go-logging"
 	"os"
 	"sort"
-	"encoding/json"
 )
 
 var log = logging.MustGetLogger("ORK")
@@ -24,9 +24,9 @@ type action string
 const NicShutdown action = "NIC_SHUTDOWN"
 
 type message struct {
-	action action `json:"action"`
-	name   string `json:"name"`
-	state  state  `json:"state"`
+	Action action `json:"action"`
+	Name   string `json:"name"`
+	State  state  `json:"state"`
 }
 
 // Sort is a wrapper for the sort.Sort function that recovers
@@ -70,7 +70,7 @@ func LogAction(action action, name string, state state) {
 		return
 	}
 
-	fmt.Println(fmt.Sprintf("20::%v" , string(msg)))
+	fmt.Println(fmt.Sprintf("20::%v", string(msg)))
 	return
 
 }
