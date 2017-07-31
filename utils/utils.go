@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/op/go-logging"
 	"os"
@@ -8,6 +9,25 @@ import (
 )
 
 var log = logging.MustGetLogger("ORK")
+
+type NetworkUsage struct {
+	Rxb, Txb, Rxp, Txp float64
+}
+
+type state string
+
+const Success state = "SUCCESS"
+const Error state = "ERROR"
+
+type action string
+
+const NicShutdown action = "NIC_SHUTDOWN"
+
+type message struct {
+	Action action `json:"action"`
+	Name   string `json:"name"`
+	State  state  `json:"state"`
+}
 
 // Sort is a wrapper for the sort.Sort function that recovers
 // panic and returns it as an error.
@@ -37,4 +57,31 @@ func LogToKernel(message string, a ...interface{}) {
 	if _, err := f.WriteString(fmt.Sprintf(message, a...)); err != nil {
 		log.Error("Error writing logs bla to /dev/kmsg", err)
 	}
+}
+
+func LogAction(action action, name string, state state) {
+	message := message{
+		action,
+		name,
+		state,
+	}
+	msg, err := json.Marshal(&message)
+	if err != nil {
+		return
+	}
+
+	fmt.Println(fmt.Sprintf("20::%v", string(msg)))
+	return
+
+}
+
+//InList checks if x is in l
+func InList(x string, l []string) bool {
+	for i := 0; i < len(l); i++ {
+		if l[i] == x {
+			return true
+		}
+	}
+
+	return false
 }

@@ -1,14 +1,17 @@
 package activity
 
 import (
-	"github.com/zero-os/0-ork/domain"
-	"github.com/patrickmn/go-cache"
 	"sort"
+
+	"github.com/patrickmn/go-cache"
+	"github.com/zero-os/0-ork/domain"
+	"github.com/zero-os/0-ork/utils"
 )
 
 type Activity interface {
 	CPU() float64
 	Memory() uint64
+	Network() utils.NetworkUsage
 	Kill()
 	Priority() int
 }
@@ -46,7 +49,16 @@ func ActivitiesByCPU(ai, aj Activity) bool {
 	return ai.CPU() > aj.CPU()
 }
 
-func GetActivities(c *cache.Cache, less Less) []Activity {
+func GetActivitiesSorted(c *cache.Cache, less Less) []Activity {
+	activities := GetActivities(c)
+
+	allActivities := Activities{activities, less}
+	sort.Sort(allActivities)
+
+	return allActivities.Activities
+}
+
+func GetActivities(c *cache.Cache) []Activity {
 	items := c.Items()
 	activities := make([]Activity, 0, c.ItemCount())
 
@@ -54,10 +66,7 @@ func GetActivities(c *cache.Cache, less Less) []Activity {
 		activities = append(activities, item.Object.(Activity))
 	}
 
-	allActivities := Activities{activities, less}
-	sort.Sort(allActivities)
-
-	return allActivities.Activities
+	return activities
 }
 
 func EvictActivity(key string, obj interface{}) {

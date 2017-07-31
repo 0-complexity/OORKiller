@@ -2,10 +2,10 @@
 package memory
 
 import (
-	"github.com/zero-os/0-ork/activity"
 	"github.com/op/go-logging"
 	"github.com/patrickmn/go-cache"
 	"github.com/shirou/gopsutil/mem"
+	"github.com/zero-os/0-ork/activity"
 )
 
 // memoryThreshold is the value in MB at which ORK should free-up memory
@@ -18,7 +18,7 @@ var log = logging.MustGetLogger("ORK")
 func isMemoryOk() (bool, error) {
 	v, err := mem.VirtualMemory()
 	if err != nil {
-		log.Debug("Error getting available memory")
+		log.Error("Error getting available memory")
 		return false, err
 	}
 
@@ -34,7 +34,7 @@ func isMemoryOk() (bool, error) {
 // Monitor checks the memory consumption and if the available memory is below memoryThreshold it kills
 // activities until available memory is more than
 func Monitor(c *cache.Cache) error {
-	log.Info("Monitoring memory")
+	log.Debug("Monitoring memory")
 
 	memOk, err := isMemoryOk()
 	if err != nil {
@@ -44,7 +44,7 @@ func Monitor(c *cache.Cache) error {
 		return nil
 	}
 
-	activities := activity.GetActivities(c, activity.ActivitiesByMem)
+	activities := activity.GetActivitiesSorted(c, activity.ActivitiesByMem)
 
 	for i := 0; i < len(activities) && memOk == false; i++ {
 		activ := activities[i]

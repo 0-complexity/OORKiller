@@ -2,13 +2,13 @@
 package cpu
 
 import (
-	"github.com/zero-os/0-ork/activity"
 	"github.com/op/go-logging"
 	"github.com/patrickmn/go-cache"
 	ps_cpu "github.com/shirou/gopsutil/cpu"
+	"github.com/zero-os/0-ork/activity"
 )
 
-const cpuThreshold float64 = 90.0 // cpuThreshold holds the value of the memory threshold
+const cpuThreshold float64 = 90.0 // cpuThreshold holds the percentage of cpu consumption at which ork should kill activities
 var log = logging.MustGetLogger("ORK")
 
 // isCPUOk returns a true if the CPU consumption is below the defined threshold
@@ -32,7 +32,7 @@ func isCPUOk() (bool, error) {
 // Monitor checks the cpu consumption and if it exceeds  cpuThreshold it kills
 // activities until the consumption is bellow the threshold.
 func Monitor(c *cache.Cache) error {
-	log.Info("Monitoring CPU")
+	log.Debug("Monitoring CPU")
 
 	cpuOk, err := isCPUOk()
 	if err != nil {
@@ -42,7 +42,7 @@ func Monitor(c *cache.Cache) error {
 		return nil
 	}
 
-	activities := activity.GetActivities(c, activity.ActivitiesByCPU)
+	activities := activity.GetActivitiesSorted(c, activity.ActivitiesByCPU)
 
 	for i := 0; i < len(activities) && cpuOk == false; i++ {
 		activ := activities[i]
