@@ -128,7 +128,7 @@ func (n Nic) setDown() {
 	}
 	utils.LogAction(utils.NicShutdown, n.name, utils.Success)
 	utils.LogToKernel("ORK: successfully shut down interface %v\n", n.name)
-	log.Debugf("Successfully shut down interface %v", n.name)
+	log.Infof("Successfully shut down interface %v", n.name)
 	return
 }
 

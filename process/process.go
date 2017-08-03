@@ -63,7 +63,7 @@ func (p Process) Kill() {
 	}
 
 	utils.LogToKernel("ORK: successfully killed process with pid %v and name %v\n", pid, name)
-	log.Debug("Successfully killed process", pid, name)
+	log.Info("Successfully killed process", pid, name)
 	return
 }
 func UpdateCache(c *cache.Cache) error {

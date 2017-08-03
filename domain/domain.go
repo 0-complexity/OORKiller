@@ -62,7 +62,7 @@ func (d Domain) Kill() {
 	}
 
 	utils.LogToKernel("ORK: successfully destroyed machine %v\n", name)
-	log.Debug("Successfully destroyed domain ", name)
+	log.Info("Successfully destroyed domain ", name)
 	return
 }
 
