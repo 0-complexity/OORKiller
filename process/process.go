@@ -2,9 +2,9 @@ package process
 
 import (
 	"fmt"
-	"strings"
 	"time"
 
+	"github.com/VividCortex/ewma"
 	"github.com/op/go-logging"
 	"github.com/patrickmn/go-cache"
 	"github.com/shirou/gopsutil/process"
@@ -14,22 +14,37 @@ import (
 var log = logging.MustGetLogger("ORK")
 
 // whiteListNames is slice of processes names that should never be killed.
-var whitelistNames = []string{"jsagent.py", "volumedriver", "ORK"}
+var whitelistNames = map[string]struct{}{
+	"jsagent.py":   struct{}{},
+	"volumedriver": struct{}{},
+	"0-ork":        struct{}{},
+	"qemu":         struct{}{},
+	"libvirtd":     struct{}{},
+	"coreX":        struct{}{},
+	"core0":        struct{}{},
+	"kthreadd":     struct{}{},
+}
+var killableKidsNames = map[string]struct{}{
+	"core0": struct{}{},
+	"coreX": struct{}{},
+}
 
 type processesMap map[int32]*process.Process
-type whiteListMap map[int32]bool
+type whiteListMap map[int32]struct{}
+type killableKidsPids map[int32]struct{}
 
 // Processes is a struct of a list of process.Process and a function to be
 // used to sort the list.
 type Process struct {
 	process  *process.Process
 	memUsage uint64
-	cpuUsage float64
+	cpuUsage ewma.MovingAverage
+	cpuDelta func(uint64) uint64
 	netUsage utils.NetworkUsage
 }
 
 func (p Process) CPU() float64 {
-	return p.cpuUsage
+	return p.cpuUsage.Value()
 }
 
 func (p Process) Memory() uint64 {
@@ -73,26 +88,21 @@ func UpdateCache(c *cache.Cache) error {
 		return err
 	}
 
-	whiteList, err := setupWhiteList(pMap)
+	whiteList, killableKids, err := setupWhiteList(pMap)
 	if err != nil {
 		log.Error("Error setting up processes ")
 		return err
 	}
 
 	for pid, proc := range pMap {
-		if killable, err := isProcessKillable(proc, pMap, whiteList); err != nil {
+		if killable, err := isProcessKillable(proc, pMap, whiteList, killableKids); err != nil {
 			log.Error("Error checking if process is killable")
 			continue
 		} else if killable == false {
 			continue
 		}
 
-		key := string(pid)
-		if p, ok := c.Get(key); ok == true {
-			proc = p.(Process).process
-		}
-
-		percent, err := proc.Percent(0)
+		times, err := proc.Times()
 		if err != nil {
 			log.Error("Error getting process cpu percentage")
 			continue
@@ -103,12 +113,23 @@ func UpdateCache(c *cache.Cache) error {
 			log.Error("Error getting process memory info")
 			continue
 		}
+		var cachedProcess Process
+		key := string(pid)
+		p, ok := c.Get(key)
+		if ok {
+			cachedProcess = p.(Process)
+			cachedProcess.cpuUsage.Add(float64(cachedProcess.cpuDelta(uint64(times.Total()))))
+		} else {
+			cachedProcess = Process{
+				process:  proc,
+				cpuDelta: utils.Delta(uint64(times.Total())),
+				cpuUsage: ewma.NewMovingAverage(60),
+			}
 
-		c.Set(key, Process{
-			process:  proc,
-			memUsage: memory.RSS,
-			cpuUsage: percent,
-		}, time.Minute)
+		}
+		cachedProcess.memUsage = memory.RSS
+
+		c.Set(key, cachedProcess, time.Minute)
 	}
 
 	return nil
@@ -135,51 +156,55 @@ func makeProcessesMap() (processesMap, error) {
 }
 
 // SetupWhiteList returns a map of pid and process.Process instance for whitelisted processes.
-func setupWhiteList(pMap processesMap) (whiteListMap, error) {
+func setupWhiteList(pMap processesMap) (whiteListMap, killableKidsPids, error) {
 	whiteList := make(whiteListMap)
-
+	killableKids := make(killableKidsPids)
 	for _, p := range pMap {
 		processName, err := p.Name()
 		if err != nil {
 			log.Error("Erorr getting process name")
-			return nil, err
+			return nil, nil, err
 		}
 
-		for _, name := range whitelistNames {
-			if match := strings.Contains(processName, name); match {
-				whiteList[p.Pid] = true
-				break
-			}
+		_, ok := whitelistNames[processName]
+		if !ok {
+			continue
 		}
+		whiteList[p.Pid] = struct{}{}
+		_, ok = killableKidsNames[processName]
+		if !ok {
+			continue
+		}
+		killableKids[p.Pid] = struct{}{}
 	}
-	whiteList[int32(2)] = true
-	whiteList[int32(1)] = true
 
-	return whiteList, nil
+	return whiteList, killableKids, nil
 }
 
 // IsProcessKillable checks if a process can be killed or not.
 // A process can't be killed if it is a member of the whiteList or if it is a child of a process in the
 // whiteList.
-func isProcessKillable(p *process.Process, pMap processesMap, whiteList whiteListMap) (bool, error) {
-	if whiteList[p.Pid] {
+func isProcessKillable(p *process.Process, pMap processesMap, whiteList whiteListMap, killableKids killableKidsPids) (bool, error) {
+	_, ok := whiteList[p.Pid]
+	if ok {
 		return false, nil
 	}
-	return isParentKillable(p, pMap, whiteList)
+	return isParentKillable(p, pMap, whiteList, killableKids)
 }
 
-func isParentKillable(p *process.Process, pMap processesMap, whiteList whiteListMap) (bool, error) {
+func isParentKillable(p *process.Process, pMap processesMap, whiteList whiteListMap, killableKids killableKidsPids) (bool, error) {
 	pPid, err := p.Ppid()
 	if err != nil {
 		log.Debug("Error getting parent pid for pid", p.Pid)
 		return false, err
 	}
 
-	if pPid == 1 {
-		return true, nil
-	}
-
-	if whiteList[pPid] {
+	_, ok := whiteList[pPid]
+	if ok {
+		_, ok = killableKids[pPid]
+		if ok {
+			return true, nil
+		}
 		return false, nil
 	}
 
@@ -189,5 +214,5 @@ func isParentKillable(p *process.Process, pMap processesMap, whiteList whiteList
 		log.Debug(message)
 		return false, fmt.Errorf(message)
 	}
-	return isParentKillable(parent, pMap, whiteList)
+	return isParentKillable(parent, pMap, whiteList, killableKids)
 }

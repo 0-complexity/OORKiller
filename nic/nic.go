@@ -65,16 +65,6 @@ var rates = map[int]rate{
 	11: {25000, 200},     // bw: 200kbit, delay: 200ms
 }
 
-// delta is a small closure over the counters, returning the delta against previous
-// first = initial value
-func delta(first uint64) func(uint64) uint64 {
-	keep := first
-	return func(delta uint64) uint64 {
-		v := delta - keep
-		keep = delta
-		return v
-	}
-}
 
 func getQdiscHandle(link netlink.Link, qdiscType string, parent uint32) (uint32, error) {
 	qdiscList, err := netlink.QdiscList(link)
@@ -262,10 +252,10 @@ func UpdateCache(c *cache.Cache) error {
 		if !ok {
 			var nic Nic
 			nic.name = iface
-			nic.delta.rxb = delta(stats.rxb)
-			nic.delta.txb = delta(stats.txb)
-			nic.delta.rxp = delta(stats.rxp)
-			nic.delta.txp = delta(stats.txp)
+			nic.delta.rxb = utils.Delta(stats.rxb)
+			nic.delta.txb = utils.Delta(stats.txb)
+			nic.delta.rxp = utils.Delta(stats.rxp)
+			nic.delta.txp = utils.Delta(stats.txp)
 			nic.ewma.rxb = ewma.NewMovingAverage(180)
 			nic.ewma.txb = ewma.NewMovingAverage(180)
 			nic.ewma.rxp = ewma.NewMovingAverage(180)

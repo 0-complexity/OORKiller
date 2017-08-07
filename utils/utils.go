@@ -29,6 +29,18 @@ type message struct {
 	State  state  `json:"state"`
 }
 
+// delta is a small closure over the counters, returning the delta against previous
+// first = initial value
+func Delta(first uint64) func(uint64) uint64 {
+	keep := first
+	return func(delta uint64) uint64 {
+		v := delta - keep
+		keep = delta
+		return v
+	}
+}
+
+
 // Sort is a wrapper for the sort.Sort function that recovers
 // panic and returns it as an error.
 func Sort(i sort.Interface) error {
