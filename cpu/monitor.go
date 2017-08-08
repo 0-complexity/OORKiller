@@ -6,11 +6,12 @@ import (
 	"github.com/patrickmn/go-cache"
 	ps_cpu "github.com/shirou/gopsutil/cpu"
 	"github.com/zero-os/0-ork/activity"
+	"github.com/VividCortex/ewma"
 )
 
 const cpuThreshold float64 = 90.0 // cpuThreshold holds the percentage of cpu consumption at which ork should kill activities
 var log = logging.MustGetLogger("ORK")
-
+var cpuEwma = ewma.NewMovingAverage(60)
 // isCPUOk returns a true if the CPU consumption is below the defined threshold
 func isCPUOk() (bool, error) {
 	percent, err := ps_cpu.Percent(0, false)
@@ -19,13 +20,14 @@ func isCPUOk() (bool, error) {
 		log.Error("Error getting available memory")
 		return false, err
 	}
+	cpuEwma.Add(percent[0])
 
-	if percent[0] < cpuThreshold {
-		log.Debug("CPU consumption is below threshold: ", percent[0])
+	if cpuEwma.Value() < cpuThreshold {
+		log.Debug("CPU consumption is below threshold: ", cpuEwma.Value())
 		return true, nil
 	}
 
-	log.Debug("CPU consumption is above threshold:", percent[0])
+	log.Debug("CPU consumption is above threshold:", cpuEwma.Value())
 	return false, nil
 }
 

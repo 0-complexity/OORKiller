@@ -3,10 +3,10 @@ package domain
 import (
 	"time"
 
+	"github.com/VividCortex/ewma"
 	"github.com/libvirt/libvirt-go"
 	"github.com/op/go-logging"
 	"github.com/patrickmn/go-cache"
-	"github.com/shirou/gopsutil/cpu"
 	"github.com/zero-os/0-ork/utils"
 )
 
@@ -17,12 +17,11 @@ var log = logging.MustGetLogger("ORK")
 type DomainCPUMap map[string]uint64
 
 type Domain struct {
-	domain         libvirt.Domain
-	memUsage       uint64
-	netUsage       utils.NetworkUsage
-	cpuUtilization float64
-	cpuTime        float64
-	cpuAvailable   float64
+	domain   libvirt.Domain
+	memUsage uint64
+	netUsage utils.NetworkUsage
+	cpuTime  ewma.MovingAverage
+	cpuDelta func(uint64) uint64
 }
 
 func (d Domain) GetDomain() libvirt.Domain {
@@ -30,7 +29,7 @@ func (d Domain) GetDomain() libvirt.Domain {
 }
 
 func (d Domain) CPU() float64 {
-	return d.cpuUtilization
+	return d.cpuTime.Value()
 }
 
 func (d Domain) Memory() uint64 {
@@ -73,8 +72,6 @@ func UpdateCache(c *cache.Cache) error {
 		return err
 	}
 
-	var cpuUtilization float64
-
 	for _, domain := range domains {
 		name, err := domain.GetName()
 		if err != nil {
@@ -86,28 +83,24 @@ func UpdateCache(c *cache.Cache) error {
 			log.Error("Error getting domain info")
 			continue
 		}
-		domainCpuTime := float64(info.CpuTime)
-		hostAvailableCPU, err := cpu.Times(false)
-		if err != nil {
-			log.Error("Error getting host cpu info")
-			continue
+		var cachedDomain Domain
+		log.Info(name)
+		d, ok := c.Get(name)
+		if ok {
+			cachedDomain = d.(Domain)
+			log.Info(cachedDomain.domain)
+			cachedDomain.domain.Free()
+			cachedDomain.cpuTime.Add(float64(cachedDomain.cpuDelta(info.CpuTime)))
+		} else {
+			cachedDomain = Domain{
+				cpuDelta: utils.Delta(info.CpuTime),
+				cpuTime:  ewma.NewMovingAverage(60),
+			}
 		}
-		totalAvailable := hostAvailableCPU[0].Total()
 
-		if d, ok := c.Get(name); ok {
-			oldDomain := d.(Domain)
-			oldDomain.domain.Free()
-
-			cpuUtilization = (domainCpuTime - oldDomain.cpuTime) / (totalAvailable - oldDomain.cpuAvailable)
-		}
-
-		c.Set(name, Domain{
-			domain:         domain,
-			memUsage:       info.MaxMem,
-			cpuUtilization: cpuUtilization,
-			cpuTime:        domainCpuTime,
-			cpuAvailable:   totalAvailable,
-		}, time.Minute)
+		cachedDomain.domain = domain
+		cachedDomain.memUsage = info.MaxMem
+		c.Set(name, cachedDomain, time.Minute)
 	}
 
 	return nil

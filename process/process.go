@@ -15,14 +15,12 @@ var log = logging.MustGetLogger("ORK")
 
 // whiteListNames is slice of processes names that should never be killed.
 var whitelistNames = map[string]struct{}{
-	"jsagent.py":   struct{}{},
-	"volumedriver": struct{}{},
-	"0-ork":        struct{}{},
-	"qemu":         struct{}{},
-	"libvirtd":     struct{}{},
-	"coreX":        struct{}{},
-	"core0":        struct{}{},
-	"kthreadd":     struct{}{},
+	"0-ork":              struct{}{},
+	"qemu-system-x86_64": struct{}{},
+	"libvirtd":           struct{}{},
+	"coreX":              struct{}{},
+	"core0":              struct{}{},
+	"kthreadd":           struct{}{},
 }
 var killableKidsNames = map[string]struct{}{
 	"core0": struct{}{},
@@ -38,13 +36,13 @@ type killableKidsPids map[int32]struct{}
 type Process struct {
 	process  *process.Process
 	memUsage uint64
-	cpuUsage ewma.MovingAverage
+	cpuTime  ewma.MovingAverage
 	cpuDelta func(uint64) uint64
 	netUsage utils.NetworkUsage
 }
 
 func (p Process) CPU() float64 {
-	return p.cpuUsage.Value()
+	return p.cpuTime.Value()
 }
 
 func (p Process) Memory() uint64 {
@@ -107,6 +105,8 @@ func UpdateCache(c *cache.Cache) error {
 			log.Error("Error getting process cpu percentage")
 			continue
 		}
+		total := times.Total()
+		nanoSeconds := time.Duration(total) * time.Second / time.Nanosecond
 
 		memory, err := proc.MemoryInfo()
 		if err != nil {
@@ -118,17 +118,15 @@ func UpdateCache(c *cache.Cache) error {
 		p, ok := c.Get(key)
 		if ok {
 			cachedProcess = p.(Process)
-			cachedProcess.cpuUsage.Add(float64(cachedProcess.cpuDelta(uint64(times.Total()))))
+			cachedProcess.cpuTime.Add(float64(cachedProcess.cpuDelta(uint64(nanoSeconds))))
 		} else {
 			cachedProcess = Process{
 				process:  proc,
-				cpuDelta: utils.Delta(uint64(times.Total())),
-				cpuUsage: ewma.NewMovingAverage(60),
+				cpuDelta: utils.Delta(uint64(nanoSeconds)),
+				cpuTime:  ewma.NewMovingAverage(60),
 			}
-
 		}
 		cachedProcess.memUsage = memory.RSS
-
 		c.Set(key, cachedProcess, time.Minute)
 	}
 
@@ -195,7 +193,7 @@ func isProcessKillable(p *process.Process, pMap processesMap, whiteList whiteLis
 func isParentKillable(p *process.Process, pMap processesMap, whiteList whiteListMap, killableKids killableKidsPids) (bool, error) {
 	pPid, err := p.Ppid()
 	if err != nil {
-		log.Debug("Error getting parent pid for pid", p.Pid)
+		log.Errorf("Error getting parent pid for pid", p.Pid)
 		return false, err
 	}
 
@@ -211,7 +209,7 @@ func isParentKillable(p *process.Process, pMap processesMap, whiteList whiteList
 	parent, inMap := pMap[pPid]
 	if inMap != true {
 		message := fmt.Sprintf("Error getting process %v from process map", p.Pid)
-		log.Debug(message)
+		log.Error(message)
 		return false, fmt.Errorf(message)
 	}
 	return isParentKillable(parent, pMap, whiteList, killableKids)
