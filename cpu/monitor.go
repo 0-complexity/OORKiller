@@ -2,16 +2,18 @@
 package cpu
 
 import (
+	"github.com/VividCortex/ewma"
 	"github.com/op/go-logging"
 	"github.com/patrickmn/go-cache"
 	ps_cpu "github.com/shirou/gopsutil/cpu"
 	"github.com/zero-os/0-ork/activity"
-	"github.com/VividCortex/ewma"
 )
 
 const cpuThreshold float64 = 90.0 // cpuThreshold holds the percentage of cpu consumption at which ork should kill activities
 var log = logging.MustGetLogger("ORK")
 var cpuEwma = ewma.NewMovingAverage(60)
+var killCounter = 0
+
 // isCPUOk returns a true if the CPU consumption is below the defined threshold
 func isCPUOk() (bool, error) {
 	percent, err := ps_cpu.Percent(0, false)
@@ -26,9 +28,15 @@ func isCPUOk() (bool, error) {
 		log.Debug("CPU consumption is below threshold: ", cpuEwma.Value())
 		return true, nil
 	}
+	killCounter += 1
 
-	log.Debug("CPU consumption is above threshold:", cpuEwma.Value())
-	return false, nil
+	if killCounter == 5 {
+		log.Debug("CPU consumption is above threshold:", cpuEwma.Value())
+		return false, nil
+	}
+
+	log.Debugf("CPU consumption is above threshold: %v and kill counter is below 5", cpuEwma.Value())
+	return true, nil
 }
 
 // Monitor checks the cpu consumption and if it exceeds  cpuThreshold it kills
@@ -49,6 +57,7 @@ func Monitor(c *cache.Cache) error {
 	for i := 0; i < len(activities) && cpuOk == false; i++ {
 		activ := activities[i]
 		activ.Kill()
+		killCounter = 0
 		if cpuOk, err = isCPUOk(); err != nil {
 			return err
 		}
