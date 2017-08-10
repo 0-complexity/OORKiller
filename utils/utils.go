@@ -67,7 +67,7 @@ func LogToKernel(message string, a ...interface{}) {
 	defer f.Close()
 
 	if _, err := f.WriteString(fmt.Sprintf(message, a...)); err != nil {
-		log.Error("Error writing logs bla to /dev/kmsg", err)
+		log.Errorf("Error writing to /dev/kmsg: %v", err)
 	}
 }
 

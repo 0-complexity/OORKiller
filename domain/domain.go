@@ -22,6 +22,7 @@ type Domain struct {
 	netUsage utils.NetworkUsage
 	cpuTime  ewma.MovingAverage
 	cpuDelta func(uint64) uint64
+	name     string
 }
 
 func (d Domain) GetDomain() libvirt.Domain {
@@ -44,11 +45,15 @@ func (d Domain) Priority() int {
 	return 100
 }
 
-func (d Domain) Kill() {
+func (d Domain) Name() string {
+	return d.name
+}
+
+func (d Domain) Kill() error {
 	dom := d.domain
 	name, err := dom.GetName()
 	if err != nil {
-		log.Error("Error getting domain name")
+		log.Errorf("Error getting domain name: %v", err)
 		name = "unknown"
 	}
 
@@ -56,19 +61,19 @@ func (d Domain) Kill() {
 
 	if err = dom.DestroyFlags(1); err != nil {
 		utils.LogToKernel("ORK: error destroying machine %v\n", name)
-		log.Error("Error destroying machine", name)
-		return
+		log.Errorf("Error destroying machine %v: %v", name, err)
+		return err
 	}
 
 	utils.LogToKernel("ORK: successfully destroyed machine %v\n", name)
-	log.Info("Successfully destroyed domain ", name)
-	return
+	log.Infof("Successfully destroyed domain %v", name)
+	return nil
 }
 
 func UpdateCache(c *cache.Cache) error {
 	domains, err := getDomains()
 	if err != nil {
-		log.Debug("Error getting domains")
+		log.Error("Error getting domains")
 		return err
 	}
 
@@ -84,11 +89,9 @@ func UpdateCache(c *cache.Cache) error {
 			continue
 		}
 		var cachedDomain Domain
-		log.Info(name)
 		d, ok := c.Get(name)
 		if ok {
 			cachedDomain = d.(Domain)
-			log.Info(cachedDomain.domain)
 			cachedDomain.domain.Free()
 			cachedDomain.cpuTime.Add(float64(cachedDomain.cpuDelta(info.CpuTime)))
 		} else {
@@ -115,7 +118,7 @@ func getDomains() ([]libvirt.Domain, error) {
 	}
 	defer conn.Close()
 
-	domains, err := conn.ListAllDomains(libvirt.CONNECT_LIST_DOMAINS_ACTIVE)
+	domains, err := conn.ListAllDomains(libvirt.CONNECT_LIST_DOMAINS_RUNNING)
 	if err != nil {
 		log.Error("Error listing domains")
 		return nil, err

@@ -21,6 +21,7 @@ var whitelistNames = map[string]struct{}{
 	"coreX":              struct{}{},
 	"core0":              struct{}{},
 	"kthreadd":           struct{}{},
+	"g8ufs":              struct{}{},
 }
 var killableKidsNames = map[string]struct{}{
 	"core0": struct{}{},
@@ -39,6 +40,7 @@ type Process struct {
 	cpuTime  ewma.MovingAverage
 	cpuDelta func(uint64) uint64
 	netUsage utils.NetworkUsage
+	name     string
 }
 
 func (p Process) CPU() float64 {
@@ -57,7 +59,11 @@ func (p Process) Priority() int {
 	return 10
 }
 
-func (p Process) Kill() {
+func (p Process) Name() string {
+	return p.name
+}
+
+func (p Process) Kill() error {
 	proc := p.process
 	pid := proc.Pid
 
@@ -71,13 +77,13 @@ func (p Process) Kill() {
 
 	if err = proc.Kill(); err != nil {
 		utils.LogToKernel("ORK: error killing process with pid %v and name %v\n", pid, name)
-		log.Error("Error killing process", pid)
-		return
+		log.Errorf("Error killing process %v %v", pid, name)
+		return err
 	}
 
 	utils.LogToKernel("ORK: successfully killed process with pid %v and name %v\n", pid, name)
-	log.Info("Successfully killed process", pid, name)
-	return
+	log.Infof("Successfully killed process %v %v", pid, name)
+	return nil
 }
 func UpdateCache(c *cache.Cache) error {
 	pMap, err := makeProcessesMap()
@@ -121,6 +127,7 @@ func UpdateCache(c *cache.Cache) error {
 			cachedProcess.cpuTime.Add(float64(cachedProcess.cpuDelta(uint64(nanoSeconds))))
 		} else {
 			cachedProcess = Process{
+				name:     key,
 				process:  proc,
 				cpuDelta: utils.Delta(uint64(nanoSeconds)),
 				cpuTime:  ewma.NewMovingAverage(60),
@@ -193,7 +200,7 @@ func isProcessKillable(p *process.Process, pMap processesMap, whiteList whiteLis
 func isParentKillable(p *process.Process, pMap processesMap, whiteList whiteListMap, killableKids killableKidsPids) (bool, error) {
 	pPid, err := p.Ppid()
 	if err != nil {
-		log.Errorf("Error getting parent pid for pid", p.Pid)
+		log.Errorf("Error getting parent pid for pid %v", p.Pid)
 		return false, err
 	}
 

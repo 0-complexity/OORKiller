@@ -25,17 +25,18 @@ func isCPUOk() (bool, error) {
 	cpuEwma.Add(percent[0])
 
 	if cpuEwma.Value() < cpuThreshold {
-		log.Debug("CPU consumption is below threshold: ", cpuEwma.Value())
+		killCounter = 0
+		log.Debugf("CPU consumption is below threshold: %v", cpuEwma.Value())
 		return true, nil
 	}
 	killCounter += 1
 
-	if killCounter == 5 {
-		log.Debug("CPU consumption is above threshold:", cpuEwma.Value())
+	if killCounter >= 5 {
+		log.Debugf("CPU consumption is above threshold: %v and kill counter is %v", cpuEwma.Value(), killCounter)
 		return false, nil
 	}
 
-	log.Debugf("CPU consumption is above threshold: %v and kill counter is below 5", cpuEwma.Value())
+	log.Debugf("CPU consumption is above threshold: %v and kill counter is %v", cpuEwma.Value(), killCounter)
 	return true, nil
 }
 
@@ -56,8 +57,10 @@ func Monitor(c *cache.Cache) error {
 
 	for i := 0; i < len(activities) && cpuOk == false; i++ {
 		activ := activities[i]
-		activ.Kill()
-		killCounter = 0
+		if err := activ.Kill(); err == nil {
+			c.Delete(activ.Name())
+			killCounter = 0
+		}
 		if cpuOk, err = isCPUOk(); err != nil {
 			return err
 		}

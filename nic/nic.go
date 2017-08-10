@@ -65,7 +65,6 @@ var rates = map[int]rate{
 	11: {25000, 200},     // bw: 200kbit, delay: 200ms
 }
 
-
 func getQdiscHandle(link netlink.Link, qdiscType string, parent uint32) (uint32, error) {
 	qdiscList, err := netlink.QdiscList(link)
 	if err != nil {
@@ -99,11 +98,15 @@ func (n Nic) Priority() int {
 	return 50
 }
 
-func (n Nic) setDown() {
+func (n Nic) Name() string {
+	return n.name
+}
+
+func (n Nic) setDown() error {
 	link, err := netlink.LinkByName(n.name)
 	if err != nil {
 		log.Errorf("Error getting link for %v: %v", n.name, err)
-		return
+		return err
 	}
 
 	utils.LogToKernel("ORK: attempting to shut down interface %v\n", n.name)
@@ -114,12 +117,12 @@ func (n Nic) setDown() {
 		utils.LogAction(utils.NicShutdown, n.name, utils.Error)
 		utils.LogToKernel("ORK: error shutting down interface %v\n", n.name)
 		log.Errorf("Error shuting down interface %v: %v", n.name, err)
-		return
+		return err
 	}
 	utils.LogAction(utils.NicShutdown, n.name, utils.Success)
 	utils.LogToKernel("ORK: successfully shut down interface %v\n", n.name)
 	log.Infof("Successfully shut down interface %v", n.name)
-	return
+	return nil
 }
 
 func (n Nic) applyTbf(link netlink.Link, parent uint32) error {
@@ -171,25 +174,24 @@ func (n Nic) applyNetem(link netlink.Link, parent uint32) error {
 	return nil
 }
 
-func (n Nic) squeeze() {
+func (n Nic) squeeze() error {
 	n.rate++
 	newRate, ok := rates[n.rate]
 	// Nic reached maximum rate and needs to be setdown
 	if !ok {
-		n.setDown()
-		return
+		return n.setDown()
 	}
 
 	link, err := netlink.LinkByName(n.name)
 	if err != nil {
 		log.Errorf("Error getting link for %v: %v", n.name, err)
-		return
+		return err
 	}
 
 	qdiscs, err := netlink.QdiscList(link)
 	if err != nil {
 		log.Errorf("Error getting qdisc list for interface %v: %v", link.Attrs().Name, err)
-		return
+		return err
 	}
 
 	for _, qdisc := range qdiscs {
@@ -201,12 +203,12 @@ func (n Nic) squeeze() {
 			if err != nil {
 				utils.LogToKernel("ORK: error deleting qdisc %v\n", qdisc)
 				log.Errorf("Error deleting qdisc for %v: %v", qdisc, err)
-				return
+				return err
 			}
 			utils.LogToKernel("ORK: successfully deleted qdisc %v\n", qdisc)
 			log.Debugf("Successfully deleted qdisc %v: %v", qdisc, err)
 		}
-
+		return nil
 	}
 	parent := uint32(netlink.HANDLE_ROOT)
 
@@ -220,21 +222,22 @@ func (n Nic) squeeze() {
 		}
 	}
 	if newRate.delay > 0 {
-		n.applyNetem(link, parent)
+		err := n.applyNetem(link, parent)
+		if err != nil {
+			return err
+		}
 	}
 
-	return
+	return nil
 }
 
 // Kill sets down the nic if it exceeded the network threshold otherwise squeeses it.
-func (n Nic) Kill() {
+func (n Nic) Kill() error {
 	if n.netUsage.Txb >= byteThreshold ||
 		n.netUsage.Txp >= packetThreshold {
-		n.setDown()
-		return
+		return n.setDown()
 	}
-	n.squeeze()
-	return
+	return n.squeeze()
 }
 
 func UpdateCache(c *cache.Cache) error {

@@ -12,8 +12,9 @@ type Activity interface {
 	CPU() float64
 	Memory() uint64
 	Network() utils.NetworkUsage
-	Kill()
+	Kill() error
 	Priority() int
+	Name() string
 }
 type Less func(Activity, Activity) bool
 
@@ -31,21 +32,21 @@ func (a Activities) Swap(i, j int) {
 func (a Activities) Less(i, j int) bool {
 	ai := a.Activities[i]
 	aj := a.Activities[j]
-	iP := ai.Priority()
-	jP := aj.Priority()
-
-	if iP != jP {
-		return iP > jP
-	}
 
 	return a.Sorter(ai, aj)
 }
 
 func ActivitiesByMem(ai, aj Activity) bool {
+	if ai.Memory() == aj.Memory() {
+		return ai.Priority() > aj.Priority()
+	}
 	return ai.Memory() > aj.Memory()
 }
 
 func ActivitiesByCPU(ai, aj Activity) bool {
+	if ai.CPU() == aj.CPU() {
+		return ai.Priority() > aj.Priority()
+	}
 	return ai.CPU() > aj.CPU()
 }
 
