@@ -9,7 +9,7 @@ import (
 )
 
 // memoryThreshold is the value in MB at which ORK should free-up memory
-const memoryThreshold uint64 = 100
+var MemoryThreshold uint64 = 100
 var killCounter = 0
 
 var log = logging.MustGetLogger("ORK")
@@ -23,7 +23,7 @@ func isMemoryOk() (bool, error) {
 		return false, err
 	}
 	availableMem := v.Available / (1024 * 1024)
-	if availableMem > memoryThreshold {
+	if availableMem > MemoryThreshold {
 		killCounter = 0
 		log.Debugf("Memory available is higher than threshold: %v", availableMem)
 		return true, nil

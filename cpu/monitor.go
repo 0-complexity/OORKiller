@@ -9,13 +9,14 @@ import (
 	"github.com/zero-os/0-ork/activity"
 )
 
-const cpuThreshold float64 = 90.0 // cpuThreshold holds the percentage of cpu consumption at which ork should kill activities
+var CpuThreshold float64 = 90.0 // cpuThreshold holds the percentage of cpu consumption at which ork should kill activities
 var log = logging.MustGetLogger("ORK")
 var cpuEwma = ewma.NewMovingAverage(60)
 var killCounter = 0
 
 // isCPUOk returns a true if the CPU consumption is below the defined threshold
 func isCPUOk() (bool, error) {
+	log.Info(CpuThreshold)
 	percent, err := ps_cpu.Percent(0, false)
 
 	if err != nil {
@@ -24,7 +25,7 @@ func isCPUOk() (bool, error) {
 	}
 	cpuEwma.Add(percent[0])
 
-	if cpuEwma.Value() < cpuThreshold {
+	if cpuEwma.Value() < CpuThreshold {
 		killCounter = 0
 		log.Debugf("CPU consumption is below threshold: %v", cpuEwma.Value())
 		return true, nil

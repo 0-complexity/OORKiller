@@ -74,6 +74,26 @@ func main() {
 			Value: "INFO",
 			Usage: "log level",
 		},
+		cli.Float64Flag{
+			Name: "cpu",
+			Value: 90.0,
+			Usage: "threshold of the cpu usage percentage",
+		},
+		cli.Uint64Flag{
+			Name: "memory",
+			Value: 100,
+			Usage: "minimum memory in MB",
+		},
+		cli.Float64Flag{
+			Name: "network_bytes",
+			Value: 175000000.0,
+			Usage: "threshold of the nic transfered bytes per second",
+		},
+		cli.Float64Flag{
+			Name: "network_packets",
+			Value: 28000.0,
+			Usage: "threshold of the nic transfered packets per second",
+		},
 	}
 	app.Action = func(context *cli.Context) {
 		level, err := logging.LogLevel(context.String("level"))
@@ -85,6 +105,10 @@ func main() {
 		backendLeveled := logging.AddModuleLevel(backend)
 		backendLeveled.SetLevel(level, "")
 		logging.SetBackend(backendLeveled)
+		cpu.CpuThreshold = context.Float64("cpu")
+		memory.MemoryThreshold = context.Uint64("mem")
+		network.ByteThreshold = context.Float64("network_bytes")
+		network.PacketThreshold = context.Float64("network_packets")
 
 		c := cache.New(cache.NoExpiration, time.Minute)
 		c.OnEvicted(activity.EvictActivity)

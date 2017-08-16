@@ -303,6 +303,7 @@ func listNics() ([]string, error) {
 			log.Errorf("Error getting link for %v: %v", iface.Name(), err)
 			return nil, err
 		}
+
 		if link.Type() == "vxlan" {
 			ifaces = append(ifaces, iface.Name())
 		}
