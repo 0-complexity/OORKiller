@@ -39,7 +39,6 @@ type Process struct {
 	memUsage uint64
 	cpuTime  ewma.MovingAverage
 	cpuDelta func(uint64) uint64
-	netUsage utils.NetworkUsage
 	name     string
 }
 
@@ -49,10 +48,6 @@ func (p Process) CPU() float64 {
 
 func (p Process) Memory() uint64 {
 	return p.memUsage
-}
-
-func (p Process) Network() utils.NetworkUsage {
-	return p.netUsage
 }
 
 func (p Process) Priority() int {
@@ -133,7 +128,7 @@ func UpdateCache(c *cache.Cache) error {
 				cpuTime:  ewma.NewMovingAverage(60),
 			}
 		}
-		cachedProcess.memUsage = memory.RSS
+		cachedProcess.memUsage = memory.RSS / (1024. * 1024.) //convert byte to mega byte
 		c.Set(key, cachedProcess, time.Minute)
 	}
 

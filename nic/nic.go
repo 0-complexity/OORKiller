@@ -38,8 +38,6 @@ type ifaceEwma struct {
 
 type Nic struct {
 	name     string
-	memUsage uint64
-	cpuUsage float64
 	netUsage utils.NetworkUsage
 	delta    ifaceDelta
 	ewma     ifaceEwma
@@ -80,14 +78,6 @@ func getQdiscHandle(link netlink.Link, qdiscType string, parent uint32) (uint32,
 	err = fmt.Errorf("Failed to find qdisk %v with parent %v", qdiscType, parent)
 	log.Error(err)
 	return 0, err
-}
-
-func (n Nic) CPU() float64 {
-	return n.cpuUsage
-}
-
-func (n Nic) Memory() uint64 {
-	return n.memUsage
 }
 
 func (n Nic) Network() utils.NetworkUsage {

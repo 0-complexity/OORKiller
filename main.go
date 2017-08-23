@@ -7,7 +7,6 @@ import (
 	"github.com/op/go-logging"
 	"github.com/patrickmn/go-cache"
 	"github.com/urfave/cli"
-	"github.com/zero-os/0-ork/activity"
 	"github.com/zero-os/0-ork/cpu"
 	"github.com/zero-os/0-ork/domain"
 	"github.com/zero-os/0-ork/memory"
@@ -87,7 +86,6 @@ func main() {
 		logging.SetBackend(backendLeveled)
 
 		c := cache.New(cache.NoExpiration, time.Minute)
-		c.OnEvicted(activity.EvictActivity)
 
 		log.Info("Starting ORK....")
 		go updateCache(c)

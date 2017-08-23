@@ -5,11 +5,11 @@ import (
 	"github.com/op/go-logging"
 	"github.com/patrickmn/go-cache"
 	"github.com/shirou/gopsutil/mem"
-	"github.com/zero-os/0-ork/activity"
 )
 
 // memoryThreshold is the value in MB at which ORK should free-up memory
 const memoryThreshold uint64 = 100
+
 var killCounter = 0
 
 var log = logging.MustGetLogger("ORK")
@@ -53,7 +53,7 @@ func Monitor(c *cache.Cache) error {
 		return nil
 	}
 
-	activities := activity.GetActivitiesSorted(c, activity.ActivitiesByMem)
+	activities := GetMemoryActivities(c)
 
 	for i := 0; i < len(activities) && memOk == false; i++ {
 		activ := activities[i]

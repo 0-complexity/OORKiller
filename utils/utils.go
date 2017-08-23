@@ -40,7 +40,6 @@ func Delta(first uint64) func(uint64) uint64 {
 	}
 }
 
-
 // Sort is a wrapper for the sort.Sort function that recovers
 // panic and returns it as an error.
 func Sort(i sort.Interface) error {
