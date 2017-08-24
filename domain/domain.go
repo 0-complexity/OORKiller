@@ -3,7 +3,6 @@ package domain
 import (
 	"time"
 
-	"encoding/json"
 	"os/exec"
 	"strings"
 
@@ -13,6 +12,7 @@ import (
 	"github.com/op/go-logging"
 	"github.com/patrickmn/go-cache"
 	"github.com/zero-os/0-ork/utils"
+	"gopkg.in/yaml.v2"
 )
 
 const connectionURI string = "qemu:///system"
@@ -41,8 +41,8 @@ type Sample struct {
 	Count uint    `json:"count"`
 	Start int64   `json:"start"`
 }
-type Samples map[int64]*Sample
-type History map[int64][]Sample
+type Samples map[string]*Sample
+type History map[string][]Sample
 
 type State struct {
 	Operation Operation `json:"op"`
@@ -103,7 +103,7 @@ func getStatistics(key string) (map[string]State, error) {
 	if err != nil {
 		return stats, err
 	}
-	if err := json.Unmarshal(out, &stats); err != nil {
+	if err := yaml.Unmarshal(out, &stats); err != nil {
 		return stats, err
 	}
 	return stats, nil
@@ -152,8 +152,8 @@ func addDomainCPU(c *cache.Cache) error {
 			continue
 		}
 
-		if _, ok := stat.Current[300]; ok {
-			cachedDomain.cpuTime = stat.Current[300].Avg
+		if _, ok := stat.Current["300"]; ok {
+			cachedDomain.cpuTime = stat.Current["300"].Avg
 		}
 		c.Set(cachedDomain.name, cachedDomain, time.Minute)
 	}
