@@ -21,7 +21,7 @@ func (a Activities) Swap(i, j int) {
 }
 
 func (a Activities) Less(i, j int) bool {
-	return a[i].Memory() > a[j].Memory()
+	return a[i].Memory() < a[j].Memory()
 }
 
 func GetMemoryActivities(c *cache.Cache) Activities {
@@ -33,6 +33,6 @@ func GetMemoryActivities(c *cache.Cache) Activities {
 			activities = append(activities, activity)
 		}
 	}
-	sort.Sort(activities)
+	sort.Sort(sort.Reverse(activities))
 	return activities
 }

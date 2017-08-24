@@ -20,7 +20,7 @@ func (a Activities) Swap(i, j int) {
 }
 
 func (a Activities) Less(i, j int) bool {
-	return a[i].CPU() > a[j].CPU()
+	return a[i].CPU() < a[j].CPU()
 }
 
 func GetCPUActivities(c *cache.Cache) Activities {
@@ -32,6 +32,6 @@ func GetCPUActivities(c *cache.Cache) Activities {
 			activities = append(activities, activity)
 		}
 	}
-	sort.Sort(activities)
+	sort.Sort(sort.Reverse(activities))
 	return activities
 }
