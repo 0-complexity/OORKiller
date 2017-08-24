@@ -12,36 +12,27 @@ type Memory interface {
 	Name() string
 }
 
-type Activities struct {
-	Activities []Memory
-}
+type Activities []Memory
 
-func (a Activities) Len() int { return len(a.Activities) }
+func (a Activities) Len() int { return len(a) }
 
 func (a Activities) Swap(i, j int) {
-	a.Activities[i], a.Activities[j] = a.Activities[j], a.Activities[i]
+	a[i], a[j] = a[j], a[i]
 }
 
 func (a Activities) Less(i, j int) bool {
-	ai := a.Activities[i]
-	aj := a.Activities[j]
-
-	return ai.Memory() > aj.Memory()
+	return a[i].Memory() > a[j].Memory()
 }
 
-func GetMemoryActivities(c *cache.Cache) []Memory {
+func GetMemoryActivities(c *cache.Cache) Activities {
 	items := c.Items()
-	activities := make([]Memory, 0, c.ItemCount())
+	activities := make(Activities, 0, c.ItemCount())
 
 	for _, item := range items {
-		activity, ok := item.Object.(Memory)
-		if !ok {
-			continue
+		if activity, ok := item.Object.(Memory); ok {
+			activities = append(activities, activity)
 		}
-		activities = append(activities, activity)
 	}
-	allActivities := Activities{activities}
-	sort.Sort(allActivities)
-
-	return allActivities.Activities
+	sort.Sort(activities)
+	return activities
 }

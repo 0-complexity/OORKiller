@@ -11,36 +11,27 @@ type CPU interface {
 	Name() string
 }
 
-type Activities struct {
-	Activities []CPU
-}
+type Activities []CPU
 
-func (a Activities) Len() int { return len(a.Activities) }
+func (a Activities) Len() int { return len(a) }
 
 func (a Activities) Swap(i, j int) {
-	a.Activities[i], a.Activities[j] = a.Activities[j], a.Activities[i]
+	a[i], a[j] = a[j], a[i]
 }
 
 func (a Activities) Less(i, j int) bool {
-	ai := a.Activities[i]
-	aj := a.Activities[j]
-
-	return ai.CPU() > aj.CPU()
+	return a[i].CPU() > a[j].CPU()
 }
 
-func GetCPUActivities(c *cache.Cache) []CPU {
+func GetCPUActivities(c *cache.Cache) Activities {
 	items := c.Items()
-	activities := make([]CPU, 0, c.ItemCount())
+	activities := make(Activities, 0, c.ItemCount())
 
 	for _, item := range items {
-		activity, ok := item.Object.(CPU)
-		if !ok {
-			continue
+		if activity, ok := item.Object.(CPU); ok {
+			activities = append(activities, activity)
 		}
-		activities = append(activities, activity)
 	}
-	allActivities := Activities{activities}
-	sort.Sort(allActivities)
-
-	return allActivities.Activities
+	sort.Sort(activities)
+	return activities
 }

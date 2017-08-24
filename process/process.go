@@ -115,7 +115,7 @@ func UpdateCache(c *cache.Cache) error {
 			continue
 		}
 		var cachedProcess Process
-		key := string(pid)
+		key := fmt.Sprint(pid)
 		p, ok := c.Get(key)
 		if ok {
 			cachedProcess = p.(Process)

@@ -3,12 +3,12 @@ package domain
 import (
 	"time"
 
-	"bytes"
 	"encoding/json"
 	"os/exec"
 	"strings"
 
 	"fmt"
+
 	"github.com/libvirt/libvirt-go"
 	"github.com/op/go-logging"
 	"github.com/patrickmn/go-cache"
@@ -98,18 +98,29 @@ func (d Domain) Kill() error {
 }
 
 func getStatistics(key string) (map[string]State, error) {
-	cmd := exec.Command("corectl", "statistics", key)
-	var out bytes.Buffer
 	var stats map[string]State
-	cmd.Stdout = &out
-	err := cmd.Run()
+	out, err := exec.Command("corectl", "statistics", key).Output()
 	if err != nil {
 		return stats, err
 	}
-	if err := json.Unmarshal(out.Bytes(), &stats); err != nil {
+	if err := json.Unmarshal(out, &stats); err != nil {
 		return stats, err
 	}
 	return stats, nil
+}
+
+func getCachedDomain(key string, c *cache.Cache) (Domain, error) {
+	var cachedDomain Domain
+	splits := strings.Split(key, "/")
+	if len(splits) != 2 {
+		return cachedDomain, fmt.Errorf("Statistics key %v doesn't match the expected format", key)
+	}
+	d, ok := c.Get(splits[1])
+	if ok {
+		cachedDomain = d.(Domain)
+	}
+	cachedDomain.name = splits[1]
+	return cachedDomain, nil
 }
 
 func addDomainMemory(c *cache.Cache) error {
@@ -128,19 +139,7 @@ func addDomainMemory(c *cache.Cache) error {
 	}
 	return nil
 }
-func getCachedDomain(key string, c *cache.Cache) (Domain, error) {
-	var cachedDomain Domain
-	splits := strings.Split(key, "/")
-	if len(splits) != 2 {
-		return cachedDomain, fmt.Errorf("Statistics key %v doesn't match the expected format", key)
-	}
-	d, ok := c.Get(splits[1])
-	if ok {
-		cachedDomain = d.(Domain)
-	}
-	cachedDomain.name = splits[1]
-	return cachedDomain, nil
-}
+
 func addDomainCPU(c *cache.Cache) error {
 	stats, err := getStatistics("kvm.vcpu.time")
 	if err != nil {
@@ -153,7 +152,9 @@ func addDomainCPU(c *cache.Cache) error {
 			continue
 		}
 
-		cachedDomain.cpuTime = stat.Current[300].Avg
+		if _, ok := stat.Current[300]; ok {
+			cachedDomain.cpuTime = stat.Current[300].Avg
+		}
 		c.Set(cachedDomain.name, cachedDomain, time.Minute)
 	}
 	return nil
