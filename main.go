@@ -13,6 +13,7 @@ import (
 	"github.com/zero-os/0-ork/network"
 	"github.com/zero-os/0-ork/nic"
 	"github.com/zero-os/0-ork/process"
+	"github.com/zero-os/0-ork/utils"
 )
 
 var log = logging.MustGetLogger("ORK")
@@ -63,6 +64,17 @@ func updateCache(c *cache.Cache) error {
 }
 
 func main() {
+	// Disable ork if development is in the kernel parameters
+	dev, err := utils.Development()
+	if err != nil {
+		log.Error(err)
+		os.Exit(1)
+	}
+
+	if dev {
+		select {}
+	}
+
 	app := cli.NewApp()
 	app.Version = "0.1.0"
 	app.Name = "ORK"

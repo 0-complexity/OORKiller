@@ -6,6 +6,8 @@ import (
 	"github.com/op/go-logging"
 	"os"
 	"sort"
+	"io/ioutil"
+	"regexp"
 )
 
 var log = logging.MustGetLogger("ORK")
@@ -95,4 +97,14 @@ func InList(x string, l []string) bool {
 	}
 
 	return false
+}
+
+func Development() (bool, error) {
+	content, err := ioutil.ReadFile("/proc/cmdline")
+	if err != nil {
+		log.Warning("Failed to read /proc/cmdline", err)
+		return false, err
+	}
+	return regexp.MatchString(`\bdevelopment\b`, string(content))
+
 }
