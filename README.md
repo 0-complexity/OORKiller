@@ -19,3 +19,8 @@ go build
 
 `./0-ork --level DEBUG`
 - `--level` : specifies the log level and defaults to INFO
+
+## Disable ORK
+
+To disable ork from monitoring and taking any actions, add `development` in the kernel parameters of the host on which
+ork is running.
