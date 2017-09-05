@@ -9,6 +9,7 @@ import (
 	"github.com/urfave/cli"
 	"github.com/zero-os/0-ork/cpu"
 	"github.com/zero-os/0-ork/domain"
+	"github.com/zero-os/0-ork/fairusage"
 	"github.com/zero-os/0-ork/memory"
 	"github.com/zero-os/0-ork/network"
 	"github.com/zero-os/0-ork/nic"
@@ -18,7 +19,7 @@ import (
 
 var log = logging.MustGetLogger("ORK")
 
-func monitorMemory(c *cache.Cache) error {
+func monitorMemory(c *cache.Cache) {
 	for {
 		if err := memory.Monitor(c); err != nil {
 			log.Error(err)
@@ -27,7 +28,7 @@ func monitorMemory(c *cache.Cache) error {
 	}
 }
 
-func monitorCPU(c *cache.Cache) error {
+func monitorCPU(c *cache.Cache) {
 	for {
 		if err := cpu.Monitor(c); err != nil {
 			log.Error(err)
@@ -36,7 +37,7 @@ func monitorCPU(c *cache.Cache) error {
 	}
 }
 
-func monitorNetwork(c *cache.Cache) error {
+func monitorNetwork(c *cache.Cache) {
 	for {
 		if err := network.Monitor(c); err != nil {
 			log.Error(err)
@@ -45,20 +46,21 @@ func monitorNetwork(c *cache.Cache) error {
 	}
 }
 
-func updateCache(c *cache.Cache) error {
+func monitorFairusage(c *cache.Cache) {
 	for {
-
-		if err := domain.UpdateCache(c); err != nil {
+		if err := fairusage.Monitor(c); err != nil {
 			log.Error(err)
 		}
+		time.Sleep(time.Second)
+	}
+}
 
-		if err := process.UpdateCache(c); err != nil {
-			log.Error(err)
-		}
+func updateCache(c *cache.Cache) {
+	for {
+		domain.UpdateCache(c)
+		process.UpdateCache(c)
+		nic.UpdateCache(c)
 
-		if err := nic.UpdateCache(c); err != nil {
-			log.Error(err)
-		}
 		time.Sleep(time.Second)
 	}
 }
@@ -104,6 +106,7 @@ func main() {
 		go monitorMemory(c)
 		go monitorCPU(c)
 		go monitorNetwork(c)
+		go monitorFairusage(c)
 
 		//wait
 		select {}

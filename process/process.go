@@ -42,23 +42,23 @@ type Process struct {
 	name     string
 }
 
-func (p Process) CPU() float64 {
+func (p *Process) CPU() float64 {
 	return p.cpuTime.Value()
 }
 
-func (p Process) Memory() uint64 {
+func (p *Process) Memory() uint64 {
 	return p.memUsage
 }
 
-func (p Process) Priority() int {
+func (p *Process) Priority() int {
 	return 10
 }
 
-func (p Process) Name() string {
+func (p *Process) Name() string {
 	return p.name
 }
 
-func (p Process) Kill() error {
+func (p *Process) Kill() error {
 	proc := p.process
 	pid := proc.Pid
 
@@ -80,22 +80,20 @@ func (p Process) Kill() error {
 	log.Infof("Successfully killed process %v %v", pid, name)
 	return nil
 }
-func UpdateCache(c *cache.Cache) error {
+func UpdateCache(c *cache.Cache) {
 	pMap, err := makeProcessesMap()
 	if err != nil {
-		log.Error("Error getting processes")
-		return err
+		log.Errorf("Error getting processes: %v", err)
 	}
 
 	whiteList, killableKids, err := setupWhiteList(pMap)
 	if err != nil {
-		log.Error("Error setting up processes ")
-		return err
+		log.Errorf("Error setting up processes: %v", err)
 	}
 
 	for pid, proc := range pMap {
 		if killable, err := isProcessKillable(proc, pMap, whiteList, killableKids); err != nil {
-			log.Error("Error checking if process is killable")
+			log.Errorf("Error checking if process is killable: %v", err)
 			continue
 		} else if killable == false {
 			continue
@@ -103,7 +101,7 @@ func UpdateCache(c *cache.Cache) error {
 
 		times, err := proc.Times()
 		if err != nil {
-			log.Error("Error getting process cpu percentage")
+			log.Errorf("Error getting process cpu percentage: %v", err)
 			continue
 		}
 		total := times.Total()
@@ -111,17 +109,17 @@ func UpdateCache(c *cache.Cache) error {
 
 		memory, err := proc.MemoryInfo()
 		if err != nil {
-			log.Error("Error getting process memory info")
+			log.Errorf("Error getting process memory info: %v", err)
 			continue
 		}
-		var cachedProcess Process
+		var cachedProcess *Process
 		key := fmt.Sprint(pid)
 		p, ok := c.Get(key)
 		if ok {
-			cachedProcess = p.(Process)
+			cachedProcess = p.(*Process)
 			cachedProcess.cpuTime.Add(float64(cachedProcess.cpuDelta(uint64(nanoSeconds))))
 		} else {
-			cachedProcess = Process{
+			cachedProcess = &Process{
 				name:     key,
 				process:  proc,
 				cpuDelta: utils.Delta(uint64(nanoSeconds)),
@@ -131,8 +129,6 @@ func UpdateCache(c *cache.Cache) error {
 		cachedProcess.memUsage = memory.RSS / (1024. * 1024.) //convert byte to mega byte
 		c.Set(key, cachedProcess, time.Minute)
 	}
-
-	return nil
 }
 
 // MakeProcessesMap returns a map of process pid and process.Process instance for all running processes

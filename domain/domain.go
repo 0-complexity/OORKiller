@@ -1,32 +1,98 @@
 package domain
 
 import (
-	"time"
-
-	"os/exec"
-	"strings"
-
 	"fmt"
+	"runtime"
+	"time"
 
 	"github.com/libvirt/libvirt-go"
 	"github.com/op/go-logging"
 	"github.com/patrickmn/go-cache"
 	"github.com/zero-os/0-ork/utils"
-	"gopkg.in/yaml.v2"
-	"runtime"
 )
 
 const connectionURI string = "qemu:///system"
-const oversubscription = 1
+const overSubscription = 1
 
 var log = logging.MustGetLogger("ORK")
-var physCpus []int
-var cpus map[int]*cpu
-var quarantinedDomains map[string]interface{}
 
 type cpu struct {
 	count int
 	vms   map[string]int
+}
+
+var physCpus []int
+var cpus map[int]*cpu
+var quarantinedDomains map[string]interface{}
+var totalCpus = runtime.NumCPU()
+
+func init() {
+	quarantinedDomains = make(map[string]interface{})
+	cpus = make(map[int]*cpu)
+
+	// Determine the number of cpu cores to be reserved for the host
+	hostCpus := 4
+	if totalCpus <= 16 {
+		hostCpus = 1
+	} else if totalCpus <= 32 {
+		hostCpus = 2
+	}
+	log.Debugf("Reserving %v cpus for host", hostCpus)
+
+	for i := hostCpus; i < totalCpus; i++ {
+		physCpus = append(physCpus, i)
+		cpus[i] = &cpu{vms: make(map[string]int)}
+	}
+	InitializeCPUs()
+}
+
+func InitializeCPUs() {
+	conn, err := libvirt.NewConnect("qemu:///system")
+	if err != nil {
+		log.Errorf("Failed to initialize cpus: %v", err)
+		return
+	}
+	defer conn.Close()
+
+	domains, err := conn.ListAllDomains(libvirt.CONNECT_LIST_DOMAINS_RUNNING)
+	if err != nil {
+		log.Errorf("Failed to initialize cpus: %v", err)
+		return
+	}
+
+	for _, domain := range domains {
+		name, err := domain.GetName()
+		if err != nil {
+			log.Errorf("Error getting domain's name: %v", err)
+			continue
+		}
+		vcpus, err := domain.GetVcpuPinInfo(libvirt.DOMAIN_AFFECT_LIVE)
+		if err != nil {
+			log.Errorf("Error getting vcpu pin info for domain %v: %v", name, err)
+			continue
+		}
+
+		var pinCount int
+		var physCpu int
+		for i, pins := range vcpus {
+			pinCount = 0
+			for j, pinned := range pins {
+				if pinned {
+					pinCount += 1
+					physCpu = j
+				}
+			}
+			if pinCount != 1 {
+				continue
+			}
+
+			quarantinedDomains[name] = struct{}{}
+			if _, ok := cpus[physCpu]; ok {
+				log.Debugf("vcpu %v of domain %v is pinned to cpu %v", i, name, physCpu)
+				cpus[physCpu].increment(name, 1)
+			}
+		}
+	}
 }
 
 func (c *cpu) decrement(name string) {
@@ -40,19 +106,17 @@ func (c *cpu) decrement(name string) {
 
 func (c *cpu) increment(name string, count int) {
 	c.count += count
-	_, ok := c.vms[name]
-	if !ok {
+	if _, ok := c.vms[name]; !ok {
 		c.vms[name] = 0
 	}
 	c.vms[name] += count
 }
 
-const aggSpan = 5
-
 type cpuUnit struct {
 	timestamp int64
 	totalTime uint64
 }
+
 type cpuAggregation struct {
 	start cpuUnit
 	end   cpuUnit
@@ -75,103 +139,24 @@ type Domain struct {
 	cpuAgg          cpuAggregation
 }
 
-type Operation string
-type Tag struct {
-	Key   string `json:"key"`
-	Value string `json:"value"`
-}
+func (d *Domain) Limit(warn int64, quarantine int64) {
+	now := time.Now().Unix()
 
-type Sample struct {
-	Avg   float64 `json:"avg"`
-	Total float64 `json:"total"`
-	Max   float64 `json:"max"`
-	Count uint    `json:"count"`
-	Start int64   `json:"start"`
-}
-type Samples map[string]*Sample
-type History map[string][]Sample
-
-type State struct {
-	Operation Operation `json:"op"`
-	LastValue float64   `json:"last_value"`
-	LastTime  int64     `json:"last_time"`
-	Current   Samples   `json:"current"`
-	History   History   `json:"history"`
-}
-
-func init() {
-	InitializeCPUs()
-}
-
-func InitializeCPUs() error {
-	totalCpus := runtime.NumCPU()
-	cpus = make(map[int]*cpu, totalCpus)
-	hostCpus := 4
-	if totalCpus <= 16 {
-		hostCpus = 1
-	} else if totalCpus <= 32 {
-		hostCpus = 2
-	}
-	conn, err := libvirt.NewConnect("qemu:///system")
-	if err != nil {
-		fmt.Println(err)
-	}
-	defer conn.Close()
-
-	domains, err := conn.ListAllDomains(libvirt.CONNECT_LIST_DOMAINS_RUNNING)
-	if err != nil {
-		fmt.Println(err)
-	}
-	for i := hostCpus; i < totalCpus; i++ {
-		physCpus = append(physCpus, i)
-		cpus[i] = &cpu{vms: make(map[string]int, len(domains))}
-	}
-
-	for _, domain := range domains {
-		pins, err := domain.GetVcpuPinInfo(libvirt.DOMAIN_AFFECT_LIVE)
-		if err != nil {
-			fmt.Println(err)
-			return err
-		}
-
-		var pinCount int
-		var physCpu int
-		for _, vcpu := range pins {
-			pinCount = 0
-			for j, pinned := range vcpu {
-				if pinned {
-					pinCount += 1
-					physCpu = j
-				}
-			}
-			if pinCount != 1 {
-				continue
-			}
-			name, err := domain.GetName()
-			if err != nil {
-				continue
-			}
-			quarantinedDomains[name] = struct{}{}
-			cpus[physCpu].increment(name, 1)
-		}
-
-	}
-	return nil
-}
-
-func (d Domain) Limit(warn int64, quarantine int64) {
 	if !d.threshold {
+		log.Debugf("Domain %v is in threshold state", d.name)
 		d.threshold = true
-		d.thresholdStart = time.Now().Unix()
+		d.thresholdStart = now
 		return
 	}
-	if !d.warn && (time.Now().Unix()-d.thresholdStart) >= warn {
-		// @todo: send email
+
+	if !d.warn && (now-d.thresholdStart) >= warn {
+		utils.LogAction(utils.VMWarning, d.name, utils.Warning)
 		d.warn = true
-		d.warnStart = time.Now().Unix()
+		d.warnStart = now
 		return
 	}
-	if !d.quarantine && (time.Now().Unix()-d.warnStart) >= quarantine {
+
+	if !d.quarantine && (now-d.warnStart) >= quarantine {
 		d.quarantine = true
 		d.quarantineStart = time.Now().Unix()
 		if _, ok := quarantinedDomains[d.name]; !ok {
@@ -180,102 +165,67 @@ func (d Domain) Limit(warn int64, quarantine int64) {
 	}
 }
 
-func (d Domain) UnLimit(releaseTime int64, threshold float64) {
+func (d *Domain) UnLimit(releaseTime int64, threshold float64) {
+	// This domain is not quarantined, nothing to be done here.
 	if !d.quarantine {
-		fmt.Println("domain not quarantined")
 		return
 	}
+
 	now := time.Now().Unix()
-	if d.quarantine && !d.release && (now-d.quarantineStart) >= releaseTime * d.releaseFactor  {
-		fmt.Println("releasing")
-		fmt.Println(now-d.quarantineStart)
-		fmt.Println(releaseTime)
+	// Check if the domain is quarantined and is ready to be released
+	if d.quarantine && !d.release && (now-d.quarantineStart) >= releaseTime*d.releaseFactor {
 		d.release = true
-		d.releaseStart = time.Now().Unix()
+		d.releaseStart = now
 		d.stopQuarantine()
 		return
 	}
-	fmt.Println("release time not reached yet")
+
+	// Check if the domain behaved well during the release window and release it for good if it did
+	// or quarantine it again if it didn't
 	if d.release && d.cpuAgg.end.timestamp != 0 {
 		d.release = false
 		agg := float64(d.cpuAgg.end.totalTime-d.cpuAgg.start.totalTime) / float64(d.cpuAgg.end.timestamp-d.cpuAgg.start.timestamp)
-		if agg > threshold {
-			fmt.Println("quaranting again")
+		if agg >= threshold {
+			log.Debugf("Domain %v is still misbehaving after release and will be put in quarantine again.", d.name)
 			d.startQuarantine()
-			d.quarantineStart = time.Now().Unix()
+			d.quarantineStart = now
 			d.releaseFactor = d.releaseFactor * 2
 		} else {
-			fmt.Println("releasing for good")
+			log.Debugf("Domain %v is released for good.", d.name)
 			d.release = false
 			d.quarantine = false
 			d.threshold = false
 			d.warn = false
 		}
-
 	}
 }
 
-func Print() {
-	for _, cpu := range physCpus {
-		fmt.Println(fmt.Sprintf("CPU:%v, count: %v", cpu, cpus[cpu].count))
-	}
-
-}
-
-func Test() {
-	c := cache.New(cache.NoExpiration, time.Minute)
-	d := Domain{name: "web_devel", quarantine: true, quarantineStart: time.Now().Unix(), releaseFactor:1}
-	c.Set(d.name, d, time.Minute)
-	d.UnLimit(5, 50)
-	time.Sleep(5 * time.Second)
-	d.UnLimit(5, 50)
-	addCpuAggregation(c)
-	time.Sleep(aggSpan)
-	addCpuAggregation(c)
-	d.UnLimit(5, 50)
-
-	//d.stopQuarantine()
-	//d = Domain{name: "web_devel2"}
-	//d.stopQuarantine()
-	//d = Domain{name: "web_devel3"}
-	//d.stopQuarantine()
-	//d = Domain{name: "web_devel4"}
-	//d.stopQuarantine()
-}
-func TestQ() {
-	d := Domain{name: "web_devel"}
-	d.startQuarantine()
-	d = Domain{name: "web_devel2"}
-	d.startQuarantine()
-	d = Domain{name: "web_devel3"}
-	d.startQuarantine()
-	d = Domain{name: "web_devel4"}
-	d.startQuarantine()
-}
-
-func (d Domain) stopQuarantine() error {
+func (d *Domain) stopQuarantine() error{
 	conn, err := libvirt.NewConnect(connectionURI)
-
 	if err != nil {
-		log.Error("Error connecting to qemu")
+		log.Errorf("Error removing %v from quarantine: %v", d.name, err)
 		return err
 	}
 	defer conn.Close()
+
 	dom, err := conn.LookupDomainByName(d.name)
 	if err != nil {
-		log.Error("Error looking up domain by name")
+		log.Errorf("Error removing %v from quarantine: %v", d.name, err)
 		return err
 	}
 	defer dom.Free()
+
 	vcpus, err := dom.GetVcpusFlags(libvirt.DOMAIN_VCPU_LIVE)
 	if err != nil {
+		log.Errorf("Error removing %v from quarantine: %v", d.name, err)
 		return err
 	}
-	totalCpus := runtime.NumCPU()
+
 	cpuMap := make([]bool, totalCpus, totalCpus)
-	for i, _ := range cpuMap {
+	for i := range cpuMap {
 		cpuMap[i] = true
 	}
+
 	for i := 0; i < int(vcpus); i++ {
 		err := dom.PinVcpu(uint(i), cpuMap)
 		if err != nil {
@@ -286,55 +236,54 @@ func (d Domain) stopQuarantine() error {
 		cpu.decrement(d.name)
 	}
 	delete(quarantinedDomains, d.name)
-
 	return nil
 }
 
-func (d Domain) startQuarantine() error {
+func (d *Domain) startQuarantine() error {
 	conn, err := libvirt.NewConnect(connectionURI)
-
 	if err != nil {
-		log.Error("Error connecting to qemu")
+		log.Errorf("Error adding %v to quarantine: %v", d.name, err)
 		return err
 	}
 	defer conn.Close()
+
 	dom, err := conn.LookupDomainByName(d.name)
 	if err != nil {
-		log.Error("Error looking up domain by name")
+		log.Errorf("Error adding %v to quarantine: %v", d.name, err)
 		return err
 	}
 	defer dom.Free()
+
 	vcpus, err := dom.GetVcpusFlags(libvirt.DOMAIN_VCPU_LIVE)
 	if err != nil {
+		log.Errorf("Error adding %v to quarantine: %v", d.name, err)
 		return err
 	}
 
 	vcpu := int32(0)
-
 	cpuPins := make(map[int][]int32, vcpus)
 Outer:
 	for _, cpu := range physCpus {
-		available := oversubscription - cpus[cpu].count
+		available := overSubscription - cpus[cpu].count
 		if available <= 0 {
 			continue
 		}
-		fmt.Printf("available %v \n", available)
 		cpuPins[cpu] = make([]int32, 0)
 		for j := 0; j < available; j++ {
 			cpuPins[cpu] = append(cpuPins[cpu], vcpu)
 			vcpu += 1
-			fmt.Printf("vcpu %v\n", vcpu)
 			if vcpu == vcpus {
-				fmt.Printf("cpupins %v \n", len(cpuPins[cpu]))
 				break Outer //from outer loop
 			}
 		}
 	}
+
 	if vcpu != vcpus {
-		return fmt.Errorf("Not enough cpu to pin %v vcpu for domain %v", vcpus, d.name)
+		message := fmt.Sprintf("Not enough cpu to pin %v vcpu for domain %v", vcpus, d.name)
+		log.Error(message)
+		return fmt.Errorf(message)
 	}
 
-	totalCpus := runtime.NumCPU()
 	for cpu, vcpus := range cpuPins {
 		cpuMap := make([]bool, totalCpus, totalCpus)
 		cpuMap[cpu] = true
@@ -344,30 +293,30 @@ Outer:
 				log.Errorf("Error pining vcpu %v for domain %v: %v", vcpu, d.name, err)
 			}
 		}
-		fmt.Printf("vcpus pins %v\n", vcpus)
+
 		cpus[cpu].increment(d.name, len(vcpus))
 	}
 	quarantinedDomains[d.name] = struct{}{}
 	return nil
 }
 
-func (d Domain) CPUAverage() float64 {
+func (d *Domain) CPUAverage() float64 {
 	return d.cpuTime
 }
 
-func (d Domain) Memory() uint64 {
+func (d *Domain) Memory() uint64 {
 	return uint64(d.memUsage)
 }
 
-func (d Domain) Priority() int {
+func (d *Domain) Priority() int {
 	return 100
 }
 
-func (d Domain) Name() string {
+func (d *Domain) Name() string {
 	return d.name
 }
 
-func (d Domain) Kill() error {
+func (d *Domain) Kill() error {
 	conn, err := libvirt.NewConnect(connectionURI)
 
 	if err != nil {
@@ -395,128 +344,40 @@ func (d Domain) Kill() error {
 	return nil
 }
 
-func getStatistics(key string) (map[string]State, error) {
-	var stats map[string]State
-	out, err := exec.Command("corectl", "statistics", key).Output()
-	if err != nil {
-		return stats, err
+func Print() {
+	for _, cpu := range physCpus {
+		fmt.Println(fmt.Sprintf("CPU:%v, count: %v", cpu, cpus[cpu].count))
 	}
-	if err := yaml.Unmarshal(out, &stats); err != nil {
-		return stats, err
-	}
-	return stats, nil
+
 }
 
-func getCachedDomain(key string, c *cache.Cache) (Domain, error) {
-	cachedDomain := Domain{
-		releaseFactor: 1,
-	}
-	splits := strings.Split(key, "/")
-	if len(splits) != 2 {
-		return cachedDomain, fmt.Errorf("Statistics key %v doesn't match the expected format", key)
-	}
-	d, ok := c.Get(splits[1])
-	if ok {
-		cachedDomain = d.(Domain)
-	}
-	cachedDomain.name = splits[1]
-	return cachedDomain, nil
+func Test() {
+	c := cache.New(cache.NoExpiration, time.Minute)
+	d := &Domain{name: "web_devel", quarantine: true, quarantineStart: time.Now().Unix(), releaseFactor: 1}
+	c.Set(d.name, d, time.Minute)
+	d.UnLimit(5, 50)
+	time.Sleep(5 * time.Second)
+	d.UnLimit(5, 50)
+	addCpuAggregation(c)
+	time.Sleep(aggSpan * time.Second)
+	addCpuAggregation(c)
+	d.UnLimit(5, 0)
+
+	//d.stopQuarantine()
+	//d = Domain{name: "web_devel2"}
+	//d.stopQuarantine()
+	//d = Domain{name: "web_devel3"}
+	//d.stopQuarantine()
+	//d = Domain{name: "web_devel4"}
+	//d.stopQuarantine()
 }
-
-func addDomainMemory(c *cache.Cache) error {
-	stats, err := getStatistics("kvm.memory.max")
-	if err != nil {
-		return err
-	}
-	for key, stat := range stats {
-		cachedDomain, err := getCachedDomain(key, c)
-		if err != nil {
-			log.Error(err)
-			continue
-		}
-		cachedDomain.memUsage = stat.LastValue
-		c.Set(cachedDomain.name, cachedDomain, time.Minute)
-	}
-	return nil
-}
-
-func addDomainCPU(c *cache.Cache) error {
-	stats, err := getStatistics("kvm.vcpu.time")
-	if err != nil {
-		return err
-	}
-	for key, stat := range stats {
-		cachedDomain, err := getCachedDomain(key, c)
-		if err != nil {
-			log.Error(err)
-			continue
-		}
-
-		if _, ok := stat.Current["300"]; ok {
-			cachedDomain.cpuTime = stat.Current["300"].Avg
-		}
-		c.Set(cachedDomain.name, cachedDomain, time.Minute)
-	}
-	return nil
-}
-
-func addCpuAggregation(c *cache.Cache) {
-	fmt.Println("********")
-	conn, err := libvirt.NewConnect(connectionURI)
-
-	if err != nil {
-		log.Error("Error connecting to qemu")
-		return
-	}
-	defer conn.Close()
-
-	items := c.Items()
-	for _, item := range items {
-		timestamp := time.Now().Unix()
-		d, ok := item.Object.(Domain)
-		if !ok || !d.release {
-			continue
-		}
-		dom, err := conn.LookupDomainByName(d.name)
-		if err != nil {
-			log.Error("Error looking up domain by name")
-			continue
-		}
-
-		defer dom.Free()
-		info, err := dom.GetInfo()
-		if err != nil {
-			log.Error("Error getting domain info")
-			continue
-		}
-
-		if (d.cpuAgg == cpuAggregation{}) {
-			fmt.Println("adding start")
-			d.cpuAgg.start.timestamp = timestamp
-			d.cpuAgg.start.totalTime = info.CpuTime
-			c.Set(d.name, d, time.Minute)
-			continue
-		}
-
-		if d.cpuAgg.end.timestamp == 0 && (timestamp-d.cpuAgg.start.timestamp) >= aggSpan {
-			fmt.Println("adding end")
-
-			d.cpuAgg.end.timestamp = timestamp
-			d.cpuAgg.end.totalTime = info.CpuTime
-			c.Set(d.name, d, time.Minute)
-
-		}
-	}
-}
-
-func UpdateCache(c *cache.Cache) error {
-	err := addDomainCPU(c)
-	if err != nil {
-		return err
-	}
-	err = addDomainMemory(c)
-	if err != nil {
-		return err
-	}
-	return nil
+func TestQ() {
+	d := &Domain{name: "web_devel"}
+	d.startQuarantine()
+	d = &Domain{name: "web_devel2"}
+	d.startQuarantine()
+	d = &Domain{name: "web_devel3"}
+	d.startQuarantine()
+	d = &Domain{name: "web_devel4"}
+	d.startQuarantine()
 }

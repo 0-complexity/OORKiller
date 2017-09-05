@@ -20,10 +20,12 @@ type state string
 
 const Success state = "SUCCESS"
 const Error state = "ERROR"
+const Warning state = "WARNING"
 
 type action string
 
 const NicShutdown action = "NIC_SHUTDOWN"
+const VMWarning action = "VM_WARNING"
 
 type message struct {
 	Action action `json:"action"`
