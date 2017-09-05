@@ -4,10 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/op/go-logging"
-	"os"
-	"sort"
 	"io/ioutil"
+	"os"
 	"regexp"
+	"sort"
 )
 
 var log = logging.MustGetLogger("ORK")
@@ -25,7 +25,8 @@ const Warning state = "WARNING"
 type action string
 
 const NicShutdown action = "NIC_SHUTDOWN"
-const VMWarning action = "VM_WARNING"
+const Quarantine action = "VM_QUARANTINE"
+const UnQuarantine action = "VM_UNQUARANTINE"
 
 type message struct {
 	Action action `json:"action"`

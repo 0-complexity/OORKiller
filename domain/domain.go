@@ -7,7 +7,6 @@ import (
 
 	"github.com/libvirt/libvirt-go"
 	"github.com/op/go-logging"
-	"github.com/patrickmn/go-cache"
 	"github.com/zero-os/0-ork/utils"
 )
 
@@ -150,7 +149,7 @@ func (d *Domain) Limit(warn int64, quarantine int64) {
 	}
 
 	if !d.warn && (now-d.thresholdStart) >= warn {
-		utils.LogAction(utils.VMWarning, d.name, utils.Warning)
+		utils.LogAction(utils.Quarantine, d.name, utils.Warning)
 		d.warn = true
 		d.warnStart = now
 		return
@@ -160,7 +159,11 @@ func (d *Domain) Limit(warn int64, quarantine int64) {
 		d.quarantine = true
 		d.quarantineStart = time.Now().Unix()
 		if _, ok := quarantinedDomains[d.name]; !ok {
-			d.startQuarantine()
+			if err := d.startQuarantine(); err != nil {
+				d.quarantine = false
+			} else {
+				utils.LogAction(utils.Quarantine, d.name, utils.Success)
+			}
 		}
 	}
 }
@@ -176,7 +179,9 @@ func (d *Domain) UnLimit(releaseTime int64, threshold float64) {
 	if d.quarantine && !d.release && (now-d.quarantineStart) >= releaseTime*d.releaseFactor {
 		d.release = true
 		d.releaseStart = now
-		d.stopQuarantine()
+		if err := d.stopQuarantine(); err != nil {
+			d.release = false
+		}
 		return
 	}
 
@@ -192,6 +197,7 @@ func (d *Domain) UnLimit(releaseTime int64, threshold float64) {
 			d.releaseFactor = d.releaseFactor * 2
 		} else {
 			log.Debugf("Domain %v is released for good.", d.name)
+			utils.LogAction(utils.UnQuarantine, d.name, utils.Success)
 			d.release = false
 			d.quarantine = false
 			d.threshold = false
@@ -200,7 +206,7 @@ func (d *Domain) UnLimit(releaseTime int64, threshold float64) {
 	}
 }
 
-func (d *Domain) stopQuarantine() error{
+func (d *Domain) stopQuarantine() error {
 	conn, err := libvirt.NewConnect(connectionURI)
 	if err != nil {
 		log.Errorf("Error removing %v from quarantine: %v", d.name, err)
@@ -291,6 +297,8 @@ Outer:
 			err := dom.PinVcpu(uint(vcpu), cpuMap)
 			if err != nil {
 				log.Errorf("Error pining vcpu %v for domain %v: %v", vcpu, d.name, err)
+				d.stopQuarantine()
+				return err
 			}
 		}
 
@@ -342,42 +350,4 @@ func (d *Domain) Kill() error {
 	utils.LogToKernel("ORK: successfully destroyed machine %v\n", d.name)
 	log.Infof("Successfully destroyed domain %v", d.name)
 	return nil
-}
-
-func Print() {
-	for _, cpu := range physCpus {
-		fmt.Println(fmt.Sprintf("CPU:%v, count: %v", cpu, cpus[cpu].count))
-	}
-
-}
-
-func Test() {
-	c := cache.New(cache.NoExpiration, time.Minute)
-	d := &Domain{name: "web_devel", quarantine: true, quarantineStart: time.Now().Unix(), releaseFactor: 1}
-	c.Set(d.name, d, time.Minute)
-	d.UnLimit(5, 50)
-	time.Sleep(5 * time.Second)
-	d.UnLimit(5, 50)
-	addCpuAggregation(c)
-	time.Sleep(aggSpan * time.Second)
-	addCpuAggregation(c)
-	d.UnLimit(5, 0)
-
-	//d.stopQuarantine()
-	//d = Domain{name: "web_devel2"}
-	//d.stopQuarantine()
-	//d = Domain{name: "web_devel3"}
-	//d.stopQuarantine()
-	//d = Domain{name: "web_devel4"}
-	//d.stopQuarantine()
-}
-func TestQ() {
-	d := &Domain{name: "web_devel"}
-	d.startQuarantine()
-	d = &Domain{name: "web_devel2"}
-	d.startQuarantine()
-	d = &Domain{name: "web_devel3"}
-	d.startQuarantine()
-	d = &Domain{name: "web_devel4"}
-	d.startQuarantine()
 }
