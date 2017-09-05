@@ -8,8 +8,8 @@ import (
 var log = logging.MustGetLogger("ORK")
 
 const threshold  = 0.8
-const quarantineTime int64 = 60
-const warnTime int64 = 30
+const quarantineTime int64 = 600
+const warnTime int64 = 300
 const releaseTime int64 = 30
 
 
