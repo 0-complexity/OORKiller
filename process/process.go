@@ -39,31 +39,26 @@ type Process struct {
 	memUsage uint64
 	cpuTime  ewma.MovingAverage
 	cpuDelta func(uint64) uint64
-	netUsage utils.NetworkUsage
 	name     string
 }
 
-func (p Process) CPU() float64 {
+func (p *Process) CPU() float64 {
 	return p.cpuTime.Value()
 }
 
-func (p Process) Memory() uint64 {
+func (p *Process) Memory() uint64 {
 	return p.memUsage
 }
 
-func (p Process) Network() utils.NetworkUsage {
-	return p.netUsage
-}
-
-func (p Process) Priority() int {
+func (p *Process) Priority() int {
 	return 10
 }
 
-func (p Process) Name() string {
+func (p *Process) Name() string {
 	return p.name
 }
 
-func (p Process) Kill() error {
+func (p *Process) Kill() error {
 	proc := p.process
 	pid := proc.Pid
 
@@ -85,22 +80,17 @@ func (p Process) Kill() error {
 	log.Infof("Successfully killed process %v %v", pid, name)
 	return nil
 }
-func UpdateCache(c *cache.Cache) error {
+func UpdateCache(c *cache.Cache) {
 	pMap, err := makeProcessesMap()
 	if err != nil {
-		log.Error("Error getting processes")
-		return err
+		log.Errorf("Error getting processes: %v", err)
 	}
 
-	whiteList, killableKids, err := setupWhiteList(pMap)
-	if err != nil {
-		log.Error("Error setting up processes ")
-		return err
-	}
+	whiteList, killableKids := setupWhiteList(pMap)
 
 	for pid, proc := range pMap {
 		if killable, err := isProcessKillable(proc, pMap, whiteList, killableKids); err != nil {
-			log.Error("Error checking if process is killable")
+			log.Errorf("Error checking if process is killable: %v", err)
 			continue
 		} else if killable == false {
 			continue
@@ -108,7 +98,7 @@ func UpdateCache(c *cache.Cache) error {
 
 		times, err := proc.Times()
 		if err != nil {
-			log.Error("Error getting process cpu percentage")
+			log.Errorf("Error getting process cpu percentage: %v", err)
 			continue
 		}
 		total := times.Total()
@@ -116,28 +106,26 @@ func UpdateCache(c *cache.Cache) error {
 
 		memory, err := proc.MemoryInfo()
 		if err != nil {
-			log.Error("Error getting process memory info")
+			log.Errorf("Error getting process memory info: %v", err)
 			continue
 		}
-		var cachedProcess Process
-		key := string(pid)
+		var cachedProcess *Process
+		key := fmt.Sprint(pid)
 		p, ok := c.Get(key)
 		if ok {
-			cachedProcess = p.(Process)
+			cachedProcess = p.(*Process)
 			cachedProcess.cpuTime.Add(float64(cachedProcess.cpuDelta(uint64(nanoSeconds))))
 		} else {
-			cachedProcess = Process{
+			cachedProcess = &Process{
 				name:     key,
 				process:  proc,
 				cpuDelta: utils.Delta(uint64(nanoSeconds)),
 				cpuTime:  ewma.NewMovingAverage(60),
 			}
 		}
-		cachedProcess.memUsage = memory.RSS
+		cachedProcess.memUsage = memory.RSS / (1024. * 1024.) //convert byte to mega byte
 		c.Set(key, cachedProcess, time.Minute)
 	}
-
-	return nil
 }
 
 // MakeProcessesMap returns a map of process pid and process.Process instance for all running processes
@@ -161,14 +149,14 @@ func makeProcessesMap() (processesMap, error) {
 }
 
 // SetupWhiteList returns a map of pid and process.Process instance for whitelisted processes.
-func setupWhiteList(pMap processesMap) (whiteListMap, killableKidsPids, error) {
+func setupWhiteList(pMap processesMap) (whiteListMap, killableKidsPids) {
 	whiteList := make(whiteListMap)
 	killableKids := make(killableKidsPids)
 	for _, p := range pMap {
 		processName, err := p.Name()
 		if err != nil {
-			log.Error("Erorr getting process name")
-			return nil, nil, err
+			log.Errorf("Erorr getting process name for %v", p.Pid)
+			continue
 		}
 
 		_, ok := whitelistNames[processName]
@@ -183,7 +171,7 @@ func setupWhiteList(pMap processesMap) (whiteListMap, killableKidsPids, error) {
 		killableKids[p.Pid] = struct{}{}
 	}
 
-	return whiteList, killableKids, nil
+	return whiteList, killableKids
 }
 
 // IsProcessKillable checks if a process can be killed or not.
@@ -215,7 +203,7 @@ func isParentKillable(p *process.Process, pMap processesMap, whiteList whiteList
 
 	parent, inMap := pMap[pPid]
 	if inMap != true {
-		message := fmt.Sprintf("Error getting process %v from process map", p.Pid)
+		message := fmt.Sprintf("Error getting parent process %v of process %v from process map", pPid, p.Pid)
 		log.Error(message)
 		return false, fmt.Errorf(message)
 	}

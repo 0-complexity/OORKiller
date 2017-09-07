@@ -6,7 +6,6 @@ import (
 	"github.com/op/go-logging"
 	"github.com/patrickmn/go-cache"
 	ps_cpu "github.com/shirou/gopsutil/cpu"
-	"github.com/zero-os/0-ork/activity"
 )
 
 const cpuThreshold float64 = 90.0 // cpuThreshold holds the percentage of cpu consumption at which ork should kill activities
@@ -53,7 +52,7 @@ func Monitor(c *cache.Cache) error {
 		return nil
 	}
 
-	activities := activity.GetActivitiesSorted(c, activity.ActivitiesByCPU)
+	activities := GetCPUActivities(c)
 
 	for i := 0; i < len(activities) && cpuOk == false; i++ {
 		activ := activities[i]

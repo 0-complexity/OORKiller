@@ -38,8 +38,6 @@ type ifaceEwma struct {
 
 type Nic struct {
 	name     string
-	memUsage uint64
-	cpuUsage float64
 	netUsage utils.NetworkUsage
 	delta    ifaceDelta
 	ewma     ifaceEwma
@@ -82,27 +80,19 @@ func getQdiscHandle(link netlink.Link, qdiscType string, parent uint32) (uint32,
 	return 0, err
 }
 
-func (n Nic) CPU() float64 {
-	return n.cpuUsage
-}
-
-func (n Nic) Memory() uint64 {
-	return n.memUsage
-}
-
-func (n Nic) Network() utils.NetworkUsage {
+func (n *Nic) Network() utils.NetworkUsage {
 	return n.netUsage
 }
 
-func (n Nic) Priority() int {
+func (n *Nic) Priority() int {
 	return 50
 }
 
-func (n Nic) Name() string {
+func (n *Nic) Name() string {
 	return n.name
 }
 
-func (n Nic) setDown() error {
+func (n *Nic) setDown() error {
 	link, err := netlink.LinkByName(n.name)
 	if err != nil {
 		log.Errorf("Error getting link for %v: %v", n.name, err)
@@ -125,7 +115,7 @@ func (n Nic) setDown() error {
 	return nil
 }
 
-func (n Nic) applyTbf(link netlink.Link, parent uint32) error {
+func (n *Nic) applyTbf(link netlink.Link, parent uint32) error {
 	//squeezing: tc qdisc add dev $NIC parent 1:1 handle 10: tbf rate 1mbit buffer 1600 limit 3000
 	qdiskAttrs := netlink.QdiscAttrs{
 		LinkIndex: link.Attrs().Index,
@@ -150,7 +140,7 @@ func (n Nic) applyTbf(link netlink.Link, parent uint32) error {
 	return nil
 }
 
-func (n Nic) applyNetem(link netlink.Link, parent uint32) error {
+func (n *Nic) applyNetem(link netlink.Link, parent uint32) error {
 	//latency: tc qdisc add dev $NIC root handle 1:0 netem delay 200ms
 	qdiscAttrs := netlink.QdiscAttrs{
 		LinkIndex: link.Attrs().Index,
@@ -174,7 +164,7 @@ func (n Nic) applyNetem(link netlink.Link, parent uint32) error {
 	return nil
 }
 
-func (n Nic) squeeze() error {
+func (n *Nic) squeeze() error {
 	n.rate++
 	newRate, ok := rates[n.rate]
 	// Nic reached maximum rate and needs to be setdown
@@ -232,7 +222,7 @@ func (n Nic) squeeze() error {
 }
 
 // Kill sets down the nic if it exceeded the network threshold otherwise squeeses it.
-func (n Nic) Kill() error {
+func (n *Nic) Kill() error {
 	if n.netUsage.Txb >= byteThreshold ||
 		n.netUsage.Txp >= packetThreshold {
 		return n.setDown()
@@ -240,20 +230,22 @@ func (n Nic) Kill() error {
 	return n.squeeze()
 }
 
-func UpdateCache(c *cache.Cache) error {
+func UpdateCache(c *cache.Cache) {
 	ifaces, err := listNics()
 	if err != nil {
-		return err
+		log.Errorf("Error listing nics: %v", err)
+		return
 	}
 	for _, iface := range ifaces {
 		stats, err := readStatistics(iface)
 		if err != nil {
+			log.Errorf("Error reading nic stats: %v", err)
 			continue
 		}
 		n, ok := c.Get(iface)
 		// If the nic doesn't exist in the cache, create a new instance for it
 		if !ok {
-			var nic Nic
+			var nic *Nic
 			nic.name = iface
 			nic.delta.rxb = utils.Delta(stats.rxb)
 			nic.delta.txb = utils.Delta(stats.txb)
@@ -274,7 +266,7 @@ func UpdateCache(c *cache.Cache) error {
 		}
 
 		// If the nic exists in the cache, add the new statistics to emwa and calculate the new usage percentage.
-		nic := n.(Nic)
+		nic := n.(*Nic)
 		nic.ewma.rxb.Add(float64(nic.delta.rxb(stats.rxb)))
 		nic.ewma.txb.Add(float64(nic.delta.txb(stats.txb)))
 		nic.ewma.rxp.Add(float64(nic.delta.rxp(stats.rxp)))
@@ -286,8 +278,6 @@ func UpdateCache(c *cache.Cache) error {
 
 		c.Set(iface, nic, time.Minute)
 	}
-
-	return nil
 }
 
 func listNics() ([]string, error) {

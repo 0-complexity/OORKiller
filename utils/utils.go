@@ -4,10 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/op/go-logging"
-	"os"
-	"sort"
 	"io/ioutil"
+	"os"
 	"regexp"
+	"sort"
 )
 
 var log = logging.MustGetLogger("ORK")
@@ -20,10 +20,13 @@ type state string
 
 const Success state = "SUCCESS"
 const Error state = "ERROR"
+const Warning state = "WARNING"
 
 type action string
 
 const NicShutdown action = "NIC_SHUTDOWN"
+const Quarantine action = "VM_QUARANTINE"
+const UnQuarantine action = "VM_UNQUARANTINE"
 
 type message struct {
 	Action action `json:"action"`
@@ -41,7 +44,6 @@ func Delta(first uint64) func(uint64) uint64 {
 		return v
 	}
 }
-
 
 // Sort is a wrapper for the sort.Sort function that recovers
 // panic and returns it as an error.
