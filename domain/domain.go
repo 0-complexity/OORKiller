@@ -11,7 +11,7 @@ import (
 )
 
 const connectionURI string = "qemu:///system"
-const overSubscription = 1
+const overSubscription = 4
 
 var log = logging.MustGetLogger("ORK")
 
@@ -113,7 +113,7 @@ func (c *cpu) increment(name string, count int) {
 
 type cpuUnit struct {
 	timestamp int64
-	totalTime uint64
+	totalTime float64
 }
 
 type cpuAggregation struct {
@@ -135,6 +135,7 @@ type Domain struct {
 	release         bool
 	releaseStart    int64
 	releaseFactor   int64
+	postRelease     bool
 	cpuAgg          cpuAggregation
 }
 
@@ -149,13 +150,15 @@ func (d *Domain) Limit(warn int64, quarantine int64) {
 	}
 
 	if !d.warn && (now-d.thresholdStart) >= warn {
+		log.Debugf("Domain %v is in warning state", d.name)
 		utils.LogAction(utils.Quarantine, d.name, utils.Warning)
 		d.warn = true
 		d.warnStart = now
 		return
 	}
 
-	if !d.quarantine && (now-d.warnStart) >= quarantine {
+	if d.warn && !d.quarantine && (now-d.warnStart) >= quarantine {
+		log.Debugf("Domain %v is in quarantine state", d.name)
 		d.quarantine = true
 		d.quarantineStart = time.Now().Unix()
 		if _, ok := quarantinedDomains[d.name]; !ok {
@@ -169,17 +172,30 @@ func (d *Domain) Limit(warn int64, quarantine int64) {
 }
 
 func (d *Domain) UnLimit(releaseTime int64, threshold float64) {
-	// This domain is not quarantined, nothing to be done here.
+	now := time.Now().Unix()
+
 	if !d.quarantine {
+		// This domain was quarantined but the flags were reset due to ork restart
+		// set quarantine to true and let it take the normal cycle
+		if _, ok := quarantinedDomains[d.name]; ok {
+			log.Debugf("setting quarantine flag")
+			d.quarantine = true
+			d.quarantineStart = now
+			return
+		}
+		d.threshold = false
+		d.warn = false
+		d.release = false
 		return
 	}
 
-	now := time.Now().Unix()
 	// Check if the domain is quarantined and is ready to be released
 	if d.quarantine && !d.release && (now-d.quarantineStart) >= releaseTime*d.releaseFactor {
+		log.Debugf("Testing domain %v release", d.name)
 		d.release = true
 		d.releaseStart = now
 		if err := d.stopQuarantine(); err != nil {
+			log.Debugf("Failed to release domain %v", d.name)
 			d.release = false
 		}
 		return
@@ -187,22 +203,28 @@ func (d *Domain) UnLimit(releaseTime int64, threshold float64) {
 
 	// Check if the domain behaved well during the release window and release it for good if it did
 	// or quarantine it again if it didn't
-	if d.release && d.cpuAgg.end.timestamp != 0 {
-		d.release = false
+	if !d.postRelease && d.release && d.cpuAgg.end.timestamp != 0 {
+		d.postRelease = true
 		agg := float64(d.cpuAgg.end.totalTime-d.cpuAgg.start.totalTime) / float64(d.cpuAgg.end.timestamp-d.cpuAgg.start.timestamp)
 		if agg >= threshold {
-			log.Debugf("Domain %v is still misbehaving after release and will be put in quarantine again.", d.name)
-			d.startQuarantine()
-			d.quarantineStart = now
 			d.releaseFactor = d.releaseFactor * 2
+			log.Debugf("Domain %v is still misbehaving after release and will be put in quarantine again.", d.name)
+			if err := d.startQuarantine(); err != nil {
+				d.quarantine = false
+			} else {
+				d.quarantineStart = now
+				utils.LogAction(utils.Quarantine, d.name, utils.Success)
+			}
 		} else {
 			log.Debugf("Domain %v is released for good.", d.name)
 			utils.LogAction(utils.UnQuarantine, d.name, utils.Success)
-			d.release = false
 			d.quarantine = false
 			d.threshold = false
 			d.warn = false
 		}
+		d.release = false
+		d.postRelease = false
+		d.cpuAgg = cpuAggregation{}
 	}
 }
 

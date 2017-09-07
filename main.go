@@ -46,7 +46,7 @@ func monitorNetwork(c *cache.Cache) {
 	}
 }
 
-func monitorFairusage(c *cache.Cache) {
+func monitorFairUsage(c *cache.Cache) {
 	for {
 		if err := fairusage.Monitor(c); err != nil {
 			log.Error(err)
@@ -106,7 +106,7 @@ func main() {
 		go monitorMemory(c)
 		go monitorCPU(c)
 		go monitorNetwork(c)
-		go monitorFairusage(c)
+		go monitorFairUsage(c)
 
 		//wait
 		select {}

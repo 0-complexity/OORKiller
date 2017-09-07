@@ -63,7 +63,7 @@ func getCachedDomain(key string, c *cache.Cache) (*Domain, error) {
 	return cachedDomain, nil
 }
 
-func addDomainMemory(c *cache.Cache) error{
+func addDomainMemory(c *cache.Cache) error {
 	stats, err := getStatistics("kvm.memory.max")
 	if err != nil {
 		log.Errorf("Error getting domains memory statistics: %v", err)
@@ -94,7 +94,7 @@ func addDomainCPU(c *cache.Cache) error {
 		}
 
 		if _, ok := stat.Current["300"]; ok {
-			cachedDomain.cpuTime = stat.Current["300"].Avg
+			cachedDomain.cpuTime = stat.Current["300"].Total / float64(time.Now().Unix()-stat.Current["300"].Start)
 		}
 		c.Set(cachedDomain.name, cachedDomain, time.Minute)
 	}
@@ -112,9 +112,16 @@ func addCpuAggregation(c *cache.Cache) error {
 
 	items := c.Items()
 	for _, item := range items {
-		timestamp := time.Now().Unix()
 		d, ok := item.Object.(*Domain)
+		// This is not a domain or it is a domain but it is not in release state
+		// no need to calculate cpu agg.
 		if !ok || !d.release {
+			d.cpuAgg = cpuAggregation{}
+			continue
+		}
+
+		// Aggregation has already been measured
+		if d.release  && d.cpuAgg.end.timestamp != 0 {
 			continue
 		}
 
@@ -131,16 +138,17 @@ func addCpuAggregation(c *cache.Cache) error {
 			continue
 		}
 
+		timestamp := time.Now().Unix()
 		if (d.cpuAgg == cpuAggregation{}) {
 			d.cpuAgg.start.timestamp = timestamp
-			d.cpuAgg.start.totalTime = info.CpuTime
+			d.cpuAgg.start.totalTime = float64(info.CpuTime) / 1000000000.
 			c.Set(d.name, d, time.Minute)
 			continue
 		}
 
 		if d.cpuAgg.end.timestamp == 0 && (timestamp-d.cpuAgg.start.timestamp) >= aggSpan {
 			d.cpuAgg.end.timestamp = timestamp
-			d.cpuAgg.end.totalTime = info.CpuTime
+			d.cpuAgg.end.totalTime = float64(info.CpuTime) /1000000000.
 			c.Set(d.name, d, time.Minute)
 		}
 	}

@@ -86,10 +86,7 @@ func UpdateCache(c *cache.Cache) {
 		log.Errorf("Error getting processes: %v", err)
 	}
 
-	whiteList, killableKids, err := setupWhiteList(pMap)
-	if err != nil {
-		log.Errorf("Error setting up processes: %v", err)
-	}
+	whiteList, killableKids := setupWhiteList(pMap)
 
 	for pid, proc := range pMap {
 		if killable, err := isProcessKillable(proc, pMap, whiteList, killableKids); err != nil {
@@ -152,14 +149,14 @@ func makeProcessesMap() (processesMap, error) {
 }
 
 // SetupWhiteList returns a map of pid and process.Process instance for whitelisted processes.
-func setupWhiteList(pMap processesMap) (whiteListMap, killableKidsPids, error) {
+func setupWhiteList(pMap processesMap) (whiteListMap, killableKidsPids) {
 	whiteList := make(whiteListMap)
 	killableKids := make(killableKidsPids)
 	for _, p := range pMap {
 		processName, err := p.Name()
 		if err != nil {
-			log.Error("Erorr getting process name")
-			return nil, nil, err
+			log.Errorf("Erorr getting process name for %v", p.Pid)
+			continue
 		}
 
 		_, ok := whitelistNames[processName]
@@ -174,7 +171,7 @@ func setupWhiteList(pMap processesMap) (whiteListMap, killableKidsPids, error) {
 		killableKids[p.Pid] = struct{}{}
 	}
 
-	return whiteList, killableKids, nil
+	return whiteList, killableKids
 }
 
 // IsProcessKillable checks if a process can be killed or not.
@@ -206,7 +203,7 @@ func isParentKillable(p *process.Process, pMap processesMap, whiteList whiteList
 
 	parent, inMap := pMap[pPid]
 	if inMap != true {
-		message := fmt.Sprintf("Error getting process %v from process map", p.Pid)
+		message := fmt.Sprintf("Error getting parent process %v of process %v from process map", pPid, p.Pid)
 		log.Error(message)
 		return false, fmt.Errorf(message)
 	}

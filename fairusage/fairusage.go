@@ -6,6 +6,7 @@ type FairUsage interface {
 	CPUAverage() float64
 	Limit(int64, int64)
 	UnLimit(int64, float64)
+	Name() string
 }
 
 func GetFairUsageActivities(c *cache.Cache) []FairUsage {
