@@ -81,7 +81,7 @@ func addDomainMemory(c *cache.Cache) error {
 }
 
 func addDomainCPU(c *cache.Cache) error {
-	stats, err := getStatistics("kvm.vcpu.time")
+	stats, err := getStatistics("kvm.cpu.time")
 	if err != nil {
 		log.Errorf("Error getting domains cpu statistics: %v", err)
 		return err
