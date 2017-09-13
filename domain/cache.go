@@ -116,7 +116,6 @@ func addCpuAggregation(c *cache.Cache) error {
 		// This is not a domain or it is a domain but it is not in release state
 		// no need to calculate cpu agg.
 		if !ok || !d.release {
-			d.cpuAgg = cpuAggregation{}
 			continue
 		}
 
