@@ -7,9 +7,9 @@ Cpu capacity is being oversubscribed 4x. Which means that every vcpu can only co
 
 ## Parameters
 - **VCPU_UNFAIR_USE_THRESHOLD**: X cpu seconds / second (eg 0.8 = 80% of hyperthread. 1 hyperthreaded core can do max 2 cpu seconds / second)
-- **WARN_TIME**: Time in seconds for which a vcpu consumes more than *VCPU_UNFAIR_USE_THRESHOLD* cpu seconds / second constantly
-- **QUARANTINE_TIME**: Time in seconds after *WARN_TIME* when a vcpu is pinned on a physical hyperthread. Max 4 vpcus are pinned on 1 hyperthread.
-- **QUARANTINE_RELEASE_TIME**: Time in seconds after a vcpu is being put in quarantine can be tried to be released.
+- **WARN_TIME**: Time in seconds for which a vcpu consumes more than *VCPU_UNFAIR_USE_THRESHOLD* cpu seconds / second constantly. Currently set to 300 seconds.
+- **QUARANTINE_TIME**: Time in seconds after *WARN_TIME* when a vcpu is pinned on a physical hyperthread. Max 4 vpcus are pinned on 1 hyperthread. Currently set to 600 seconds.
+- **QUARANTINE_RELEASE_TIME**: Time in seconds after a vcpu is being put in quarantine can be tried to be released. Currently set to 300 seconds.
 
 ## VCPU quarantine section
 Vcpus for vm are grouped together on X amount of the complete cpu power of a node.
