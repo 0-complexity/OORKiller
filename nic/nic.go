@@ -245,7 +245,7 @@ func UpdateCache(c *cache.Cache) {
 		n, ok := c.Get(iface)
 		// If the nic doesn't exist in the cache, create a new instance for it
 		if !ok {
-			var nic *Nic
+			nic := &Nic{}
 			nic.name = iface
 			nic.delta.rxb = utils.Delta(stats.rxb)
 			nic.delta.txb = utils.Delta(stats.txb)
