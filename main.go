@@ -67,13 +67,7 @@ func updateCache(c *cache.Cache) {
 
 func main() {
 	// Disable ork if development is in the kernel parameters
-	dev, err := utils.Development()
-	if err != nil {
-		log.Error(err)
-		os.Exit(1)
-	}
-
-	if dev {
+	if utils.Development() {
 		select {}
 	}
 
@@ -103,10 +97,19 @@ func main() {
 
 		log.Info("Starting ORK....")
 		go updateCache(c)
-		go monitorMemory(c)
-		go monitorCPU(c)
-		go monitorNetwork(c)
-		go monitorFairUsage(c)
+
+		if utils.MonitorCPU() {
+			go monitorCPU(c)
+		}
+		if utils.MonitorMem() {
+			go monitorMemory(c)
+		}
+		if utils.MonitorNetwork() {
+			go monitorNetwork(c)
+		}
+		if utils.MonitorFairUsage() {
+			go monitorFairUsage(c)
+		}
 
 		//wait
 		select {}

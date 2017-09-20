@@ -3,11 +3,13 @@ package utils
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/google/shlex"
 	"github.com/op/go-logging"
 	"io/ioutil"
 	"os"
 	"regexp"
 	"sort"
+	"strings"
 )
 
 var log = logging.MustGetLogger("ORK")
@@ -32,6 +34,80 @@ type message struct {
 	Action action `json:"action"`
 	Name   string `json:"name"`
 	State  state  `json:"state"`
+}
+
+type kernelOptions map[string][]string
+
+var kernelArgs kernelOptions
+var dev bool = false
+var monitorMem bool = true
+var monitorCPU bool = true
+var monitorNetwork bool = true
+var monitorFairUsage bool = true
+
+func init() {
+	kernelArgs := getKernelOptions()
+
+	log.Debugf("Kernel Args: %v", kernelArgs)
+
+	if args, ok := kernelArgs["ork"]; ok {
+		for _, arg := range args {
+			if match, err := regexp.MatchString(`development`, arg); err != nil {
+				log.Error(err)
+				os.Exit(1)
+			} else if match {
+				dev = true
+			}
+
+			if match, err := regexp.MatchString(`nomem`, arg); err != nil {
+				log.Error(err)
+				os.Exit(1)
+			} else if match {
+				monitorMem = false
+			}
+
+			if match, err := regexp.MatchString(`nocpu`, arg); err != nil {
+				log.Error(err)
+				os.Exit(1)
+			} else if match {
+				monitorCPU = false
+			}
+
+			if match, err := regexp.MatchString(`nonetwork`, arg); err != nil {
+				log.Error(err)
+				os.Exit(1)
+			} else if match {
+				monitorNetwork = false
+			}
+
+			if match, err := regexp.MatchString(`nofairusage`, arg); err != nil {
+				log.Error(err)
+				os.Exit(1)
+			} else if match {
+				monitorFairUsage = false
+			}
+		}
+	}
+}
+
+func MonitorCPU() bool {
+	return monitorCPU
+}
+
+func MonitorMem() bool {
+	return monitorMem
+}
+
+func MonitorNetwork() bool {
+	return monitorNetwork
+}
+
+func MonitorFairUsage() bool {
+	return monitorFairUsage
+}
+
+func Development() bool {
+	return dev
 }
 
 // delta is a small closure over the counters, returning the delta against previous
@@ -102,12 +178,28 @@ func InList(x string, l []string) bool {
 	return false
 }
 
-func Development() (bool, error) {
+func parseKernelOptions(content string) kernelOptions {
+	options := kernelOptions{}
+	cmdline, _ := shlex.Split(strings.TrimSpace(content))
+	for _, option := range cmdline {
+		kv := strings.SplitN(option, "=", 2)
+		key := kv[0]
+		value := ""
+		if len(kv) == 2 {
+			value = kv[1]
+		}
+		options[key] = append(options[key], value)
+	}
+	return options
+}
+
+
+func getKernelOptions() kernelOptions {
 	content, err := ioutil.ReadFile("/proc/cmdline")
 	if err != nil {
 		log.Warning("Failed to read /proc/cmdline", err)
-		return false, err
+		return kernelOptions{}
 	}
-	return regexp.MatchString(`\bdevelopment\b`, string(content))
 
+	return parseKernelOptions(string(content))
 }

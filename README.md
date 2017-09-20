@@ -22,5 +22,12 @@ go build
 
 ## Disable ORK
 
-To disable ork from monitoring and taking any actions, add `development` in the kernel parameters of the host on which
+To disable ork from monitoring and taking any actions, add `ork=development` in the kernel parameters of the host on which
 ork is running.
+
+To disable a specific monitoring, add `ork=<nomonitor>` in the kernel parameters where `<nomonitor>` can be any of the following:
+
+* `nocpu`: disables cpu monitoring
+* `nomem`: disables memory monitoring
+* `nonetwork`: disables network monitoring
+* `nofairusage`: disables fairusage monitoring
