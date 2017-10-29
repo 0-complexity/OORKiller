@@ -104,12 +104,12 @@ func (n *Nic) setDown() error {
 	err = netlink.LinkSetDown(link)
 
 	if err != nil {
-		utils.LogAction(utils.NicShutdown, n.name, utils.Error)
+		utils.LogEvent(utils.NicShutdown, n.name, utils.Error)
 		utils.LogToKernel("ORK: error shutting down interface %v\n", n.name)
 		log.Errorf("Error shuting down interface %v: %v", n.name, err)
 		return err
 	}
-	utils.LogAction(utils.NicShutdown, n.name, utils.Success)
+	utils.LogEvent(utils.NicShutdown, n.name, utils.Success)
 	utils.LogToKernel("ORK: successfully shut down interface %v\n", n.name)
 	log.Infof("Successfully shut down interface %v", n.name)
 	return nil

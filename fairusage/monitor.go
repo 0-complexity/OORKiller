@@ -20,11 +20,11 @@ func Monitor(c *cache.Cache) error {
 
 	for _, activity := range activities {
 		if activity.CPUAverage() > threshold {
-			log.Debug("Activity %v exceeded fair usage threshold", activity.Name())
+			log.Debugf("Activity %v exceeded fair usage threshold", activity.Name())
 			activity.Limit(warnTime, quarantineTime)
 			continue
 		}
-		log.Debug("Activity %v is below fair usage threshold", activity.Name())
+		log.Debugf("Activity %v is below fair usage threshold", activity.Name())
 		activity.UnLimit(releaseTime, threshold)
 	}
 	return nil

@@ -24,16 +24,16 @@ const Success state = "SUCCESS"
 const Error state = "ERROR"
 const Warning state = "WARNING"
 
-type action string
+type event string
 
-const NicShutdown action = "NIC_SHUTDOWN"
-const Quarantine action = "VM_QUARANTINE"
-const UnQuarantine action = "VM_UNQUARANTINE"
+const NicShutdown event = "NIC_SHUTDOWN"
+const Quarantine event = "VM_QUARANTINE"
+const UnQuarantine event = "VM_UNQUARANTINE"
 
 type message struct {
-	Action action `json:"action"`
-	Name   string `json:"name"`
-	State  state  `json:"state"`
+	Event event  `json:"event"`
+	Name  string `json:"name"`
+	State state  `json:"state"`
 }
 
 type kernelOptions map[string][]string
@@ -151,9 +151,9 @@ func LogToKernel(message string, a ...interface{}) {
 	}
 }
 
-func LogAction(action action, name string, state state) {
+func LogEvent(event event, name string, state state) {
 	message := message{
-		action,
+		event,
 		name,
 		state,
 	}
@@ -192,7 +192,6 @@ func parseKernelOptions(content string) kernelOptions {
 	}
 	return options
 }
-
 
 func getKernelOptions() kernelOptions {
 	content, err := ioutil.ReadFile("/proc/cmdline")

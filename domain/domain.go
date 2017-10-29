@@ -151,7 +151,7 @@ func (d *Domain) Limit(warn int64, quarantine int64) {
 
 	if !d.warn && (now-d.thresholdStart) >= warn {
 		log.Debugf("Domain %v is in warning state", d.name)
-		utils.LogAction(utils.Quarantine, d.name, utils.Warning)
+		utils.LogEvent(utils.Quarantine, d.name, utils.Warning)
 		d.warn = true
 		d.warnStart = now
 		return
@@ -165,7 +165,7 @@ func (d *Domain) Limit(warn int64, quarantine int64) {
 			if err := d.startQuarantine(); err != nil {
 				d.quarantine = false
 			} else {
-				utils.LogAction(utils.Quarantine, d.name, utils.Success)
+				utils.LogEvent(utils.Quarantine, d.name, utils.Success)
 			}
 		}
 	}
@@ -213,11 +213,11 @@ func (d *Domain) UnLimit(releaseTime int64, threshold float64) {
 				d.quarantine = false
 			} else {
 				d.quarantineStart = now
-				utils.LogAction(utils.Quarantine, d.name, utils.Success)
+				utils.LogEvent(utils.Quarantine, d.name, utils.Success)
 			}
 		} else {
 			log.Debugf("Domain %v is released for good.", d.name)
-			utils.LogAction(utils.UnQuarantine, d.name, utils.Success)
+			utils.LogEvent(utils.UnQuarantine, d.name, utils.Success)
 			d.quarantine = false
 			d.threshold = false
 			d.warn = false
